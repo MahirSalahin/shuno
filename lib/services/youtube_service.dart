@@ -3,6 +3,26 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import '../models/youtube_search_item.dart';
 
 class YoutubeService {
+  Future<Uri> resolveAudioUrl(String videoId) async {
+    final youtube = YoutubeExplode();
+    try {
+      final manifest = await youtube.videos.streams
+          .getManifest(videoId)
+          .timeout(const Duration(seconds: 30));
+      if (manifest.audioOnly.isEmpty) {
+        throw StateError('This video has no playable audio-only stream.');
+      }
+      final mp4 = manifest.audioOnly.where(
+        (stream) => stream.container == StreamContainer.mp4,
+      );
+      final stream = (mp4.isNotEmpty ? mp4 : manifest.audioOnly)
+          .withHighestBitrate();
+      return stream.url;
+    } finally {
+      youtube.close();
+    }
+  }
+
   Future<List<YoutubeSearchItem>> search(String query) async {
     final trimmedQuery = query.trim();
     if (trimmedQuery.isEmpty) return [];

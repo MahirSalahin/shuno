@@ -1,5 +1,5 @@
 name: shuno
-description: "Shuno: a personal YouTube search experiment."
+description: "Shuno: a personal YouTube audio experiment."
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -9,10 +9,13 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  just_audio: 0.10.6
   # 3.1.0 throws a getT NoSuchMethodError on some search results.
   youtube_explode_dart: 3.0.5
 
 dev_dependencies:
+  integration_test:
+    sdk: flutter
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0

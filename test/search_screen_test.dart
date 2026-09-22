@@ -4,12 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shuno/main.dart';
 import 'package:shuno/models/youtube_search_item.dart';
+import 'package:shuno/services/playback_controller.dart';
 import 'package:shuno/screens/search_screen.dart';
 import 'package:shuno/services/youtube_service.dart';
+
+import 'helpers/fake_audio_player.dart';
 
 class FakeYoutubeService extends YoutubeService {
   final queries = <String>[];
   Completer<List<YoutubeSearchItem>> response = Completer();
+
+  @override
+  Future<Uri> resolveAudioUrl(String videoId) async =>
+      Uri.parse('https://example.com/audio.m4a');
 
   @override
   Future<List<YoutubeSearchItem>> search(String query) {
@@ -27,8 +34,15 @@ const sample = YoutubeSearchItem(
 );
 
 Future<void> openSearch(WidgetTester tester, FakeYoutubeService service) async {
+  final playback = PlaybackController(
+    youtubeService: service,
+    player: FakeAudioPlayer(),
+  );
+  addTearDown(playback.dispose);
   await tester.pumpWidget(
-    MaterialApp(home: SearchScreen(youtubeService: service)),
+    MaterialApp(
+      home: SearchScreen(youtubeService: service, playbackController: playback),
+    ),
   );
 }
 
@@ -81,7 +95,12 @@ void main() {
     expect(find.byIcon(Icons.image_not_supported_outlined), findsOneWidget);
     await tester.tap(find.text('Example song'));
     await tester.pumpAndSettle();
-    expect(find.text('Example song\nVideo ID: example-id'), findsOneWidget);
+    expect(find.text('Playing'), findsOneWidget);
+    expect(find.byTooltip('Pause'), findsOneWidget);
+    await tester.tap(find.byTooltip('Pause'));
+    await tester.pumpAndSettle();
+    expect(find.text('Paused'), findsOneWidget);
+    expect(find.byTooltip('Play'), findsOneWidget);
   });
 
   testWidgets('empty response shows no-results message', (tester) async {

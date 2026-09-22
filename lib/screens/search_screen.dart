@@ -3,20 +3,27 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/youtube_search_item.dart';
+import '../services/playback_controller.dart';
 import '../services/youtube_service.dart';
+import '../widgets/playback_bar.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key, this.youtubeService});
+  const SearchScreen({super.key, this.youtubeService, this.playbackController});
 
   final YoutubeService? youtubeService;
+  final PlaybackController? playbackController;
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen> {
+class _SearchScreenState extends State<SearchScreen>
+    with WidgetsBindingObserver {
   final _queryController = TextEditingController();
   late final _youtubeService = widget.youtubeService ?? YoutubeService();
+  late final _playback =
+      widget.playbackController ??
+      PlaybackController(youtubeService: _youtubeService);
   List<YoutubeSearchItem> _results = [];
   bool _isLoading = false;
   bool _hasSearched = false;
@@ -24,7 +31,27 @@ class _SearchScreenState extends State<SearchScreen> {
   String? _searchError;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _playback.addListener(_updatePlayback);
+  }
+
+  void _updatePlayback() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // This milestone deliberately supports foreground playback only.
+    unawaited(_playback.setForeground(state == AppLifecycleState.resumed));
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _playback.removeListener(_updatePlayback);
+    if (widget.playbackController == null) _playback.dispose();
     _queryController.dispose();
     super.dispose();
   }
@@ -72,6 +99,9 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Shuno')),
+      bottomNavigationBar: _playback.selected == null
+          ? null
+          : SafeArea(top: false, child: PlaybackBar(controller: _playback)),
       body: SafeArea(
         child: Column(
           children: [
@@ -147,15 +177,7 @@ class _SearchScreenState extends State<SearchScreen> {
           margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: () {
-              ScaffoldMessenger.of(context)
-                ..hideCurrentSnackBar()
-                ..showSnackBar(
-                  SnackBar(
-                    content: Text('${item.title}\nVideo ID: ${item.id}'),
-                  ),
-                );
-            },
+            onTap: _playback.isLoading ? null : () => _playback.playItem(item),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
