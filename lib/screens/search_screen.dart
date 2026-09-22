@@ -50,12 +50,14 @@ class _SearchScreenState extends State<SearchScreen> {
   String? _searchError;
 
   final List<String> _quickTags = [
-    'Lofi Beats',
-    'Ambient Study',
-    'Synthwave',
-    'Jazz Classics',
-    'Acoustic Guitar',
-    'Deep Focus',
+    'White Noise',
+    'Rain Sounds',
+    'Ocean Waves',
+    'Brown Noise',
+    'Audiobook',
+    'Quran',
+    'Islamic Lecture',
+    'Nasheed',
   ];
 
   @override
@@ -127,7 +129,24 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Shuno')),
+      appBar: AppBar(
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.asset(
+                'assets/shuno.png',
+                height: 26,
+                width: 26,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text('Shuno'),
+          ],
+        ),
+      ),
       bottomNavigationBar:
           widget.showBottomPlayer && _playback.selected != null
           ? SafeArea(

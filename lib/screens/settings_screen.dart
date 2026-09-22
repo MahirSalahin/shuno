@@ -177,10 +177,18 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
           ),
-          const ListTile(
-            title: Text('Shuno'),
-            subtitle: Text('Personal YouTube Audio Experiment • v0.1.0'),
-            leading: Icon(Icons.headphones),
+          ListTile(
+            title: const Text('Shuno'),
+            subtitle: const Text('Personal YouTube Audio Experiment • v0.1.0'),
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/shuno.png',
+                width: 36,
+                height: 36,
+                fit: BoxFit.cover,
+              ),
+            ),
           ),
           const ListTile(
             title: Text('Built with'),
