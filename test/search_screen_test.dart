@@ -15,7 +15,7 @@ class FakeYoutubeService extends YoutubeService {
   Completer<List<YoutubeSearchItem>> response = Completer();
 
   @override
-  Future<Uri> resolveAudioUrl(String videoId) async =>
+  Future<Uri> resolveAudioUrl(String videoId, {bool highQuality = true}) async =>
       Uri.parse('https://example.com/audio.m4a');
 
   @override

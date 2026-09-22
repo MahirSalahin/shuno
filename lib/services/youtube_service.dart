@@ -3,24 +3,41 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import '../models/youtube_search_item.dart';
 
 class YoutubeService {
-  Future<Uri> resolveAudioUrl(String videoId) async {
+  Future<Uri> resolveAudioUrl(String videoId, {bool highQuality = true}) async {
     final youtube = YoutubeExplode();
     try {
-      final manifest = await youtube.videos.streams
+      final manifest = await youtube.videos.streamsClient
           .getManifest(videoId)
           .timeout(const Duration(seconds: 30));
+
+      // Prioritize Stream 18 (universal 360p MP4 with AAC stereo audio, ratebypass=yes, unthrottled)
+      final stream18 = manifest.muxed.where((s) => s.tag == 18).firstOrNull;
+      if (stream18 != null) {
+        return stream18.url;
+      }
+
       if (manifest.audioOnly.isEmpty) {
-        throw StateError('This video has no playable audio-only stream.');
+        if (manifest.muxed.isNotEmpty) {
+          return manifest.muxed.first.url;
+        }
+        throw StateError('This video has no playable audio stream.');
       }
       final mp4 = manifest.audioOnly.where(
         (stream) => stream.container == StreamContainer.mp4,
       );
-      final stream = (mp4.isNotEmpty ? mp4 : manifest.audioOnly)
-          .withHighestBitrate();
+      final pool = mp4.isNotEmpty ? mp4 : manifest.audioOnly;
+      final stream = highQuality
+          ? pool.withHighestBitrate()
+          : (pool.length > 1 ? pool.elementAt(pool.length ~/ 2) : pool.first);
       return stream.url;
     } finally {
       youtube.close();
     }
+  }
+
+  Future<List<Uri>> resolveAudioUrls(String videoId, {bool highQuality = true}) async {
+    final single = await resolveAudioUrl(videoId, highQuality: highQuality);
+    return [single];
   }
 
   Future<List<YoutubeSearchItem>> search(String query) async {
@@ -29,9 +46,6 @@ class YoutubeService {
 
     final youtube = YoutubeExplode();
     try {
-      // Fetch only the first page for this milestone.
-      // searchContent avoids the upload-date parsing in search(), which can
-      // fail on "Streamed ..." dates. Shuno does not need upload dates.
       final results = await youtube.search
           .searchContent(trimmedQuery, filter: TypeFilters.video)
           .timeout(const Duration(seconds: 20));
@@ -45,6 +59,55 @@ class YoutubeService {
               channelName: video.author,
               thumbnailUrl: ThumbnailSet(video.id.value).mediumResUrl,
               duration: _parseDuration(video.duration),
+            ),
+          )
+          .toList();
+    } finally {
+      youtube.close();
+    }
+  }
+
+  Future<List<YoutubeSearchItem>> getRelatedVideos(
+    YoutubeSearchItem currentItem,
+  ) async {
+    final youtube = YoutubeExplode();
+    try {
+      try {
+        final video = await youtube.videos.get(currentItem.id);
+        final related = await youtube.videos.getRelatedVideos(video);
+        if (related != null && related.isNotEmpty) {
+          return related
+              .where((v) => v.id.value != currentItem.id)
+              .map(
+                (v) => YoutubeSearchItem(
+                  id: v.id.value,
+                  title: v.title,
+                  channelName: v.author,
+                  thumbnailUrl: ThumbnailSet(v.id.value).mediumResUrl,
+                  duration: v.duration,
+                ),
+              )
+              .toList();
+        }
+      } catch (_) {
+        // Fallback to query below
+      }
+
+      final query = '${currentItem.title} ${currentItem.channelName}';
+      final results = await youtube.search
+          .searchContent(query, filter: TypeFilters.video)
+          .timeout(const Duration(seconds: 15));
+
+      return results
+          .whereType<SearchVideo>()
+          .where((v) => v.id.value != currentItem.id)
+          .map(
+            (v) => YoutubeSearchItem(
+              id: v.id.value,
+              title: v.title,
+              channelName: v.author,
+              thumbnailUrl: ThumbnailSet(v.id.value).mediumResUrl,
+              duration: _parseDuration(v.duration),
             ),
           )
           .toList();

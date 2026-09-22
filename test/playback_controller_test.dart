@@ -14,7 +14,7 @@ class FakeYoutubeService extends YoutubeService {
   Object? error;
 
   @override
-  Future<Uri> resolveAudioUrl(String videoId) async {
+  Future<Uri> resolveAudioUrl(String videoId, {bool highQuality = true}) async {
     requests.add(videoId);
     if (error != null) throw error!;
     return pending == null ? source(videoId) : pending!.future;
@@ -38,7 +38,11 @@ void main() {
   setUp(() {
     youtube = FakeYoutubeService();
     player = FakeAudioPlayer();
-    controller = PlaybackController(youtubeService: youtube, player: player);
+    controller = PlaybackController(
+      youtubeService: youtube,
+      player: player,
+      pauseOnBackground: true,
+    );
   });
   tearDown(() => controller.dispose());
 

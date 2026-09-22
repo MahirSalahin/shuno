@@ -1,23 +1,41 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 
 import '../models/youtube_search_item.dart';
+import 'storage_service.dart';
 import 'youtube_service.dart';
 
-/// Owns a single foreground player. No queue or persistent playback state.
+enum PlaybackLoopMode { off, all, one }
+
 class PlaybackController extends ChangeNotifier {
   PlaybackController({
     required YoutubeService youtubeService,
+    StorageService? storageService,
     AudioPlayer? player,
+    bool pauseOnBackground = false,
   }) : _youtubeService = youtubeService,
-       _player = player;
+       _storageService = storageService,
+       _player = player,
+       _pauseOnBackground = pauseOnBackground;
 
   final YoutubeService _youtubeService;
+  final StorageService? _storageService;
+  final bool _pauseOnBackground;
   AudioPlayer? _player;
+
   StreamSubscription<PlayerState>? _stateSubscription;
   StreamSubscription<PlayerException>? _errorSubscription;
+  StreamSubscription<Duration>? _positionSubscription;
+  StreamSubscription<Duration?>? _durationSubscription;
+  StreamSubscription<Duration>? _bufferedSubscription;
+
+  final List<YoutubeSearchItem> _queue = [];
+  int _currentIndex = -1;
+
   YoutubeSearchItem? _selected;
   String? _error;
   bool _loading = false;
@@ -25,6 +43,16 @@ class PlaybackController extends ChangeNotifier {
   bool _foreground = true;
   int _request = 0;
 
+  PlaybackLoopMode _loopMode = PlaybackLoopMode.off;
+  bool _isShuffle = false;
+  List<YoutubeSearchItem> _originalQueueOrder = [];
+
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  Duration _bufferedPosition = Duration.zero;
+
+  List<YoutubeSearchItem> get queue => List.unmodifiable(_queue);
+  int get currentIndex => _currentIndex;
   YoutubeSearchItem? get selected => _selected;
   String? get error => _error;
   bool get isLoading => _loading;
@@ -33,52 +61,217 @@ class PlaybackController extends ChangeNotifier {
   bool get isPlaying =>
       (_player?.playing ?? false) && !isCompleted && _error == null;
 
+  PlaybackLoopMode get loopMode => _loopMode;
+  bool get isShuffle => _isShuffle;
+  Duration get position => _position;
+  Duration get duration => _duration;
+  Duration get bufferedPosition => _bufferedPosition;
+  bool get hasNext =>
+      _loopMode == PlaybackLoopMode.all ||
+      _currentIndex + 1 < _queue.length ||
+      (_storageService != null && _storageService.autoplay);
+  bool get hasPrevious => _currentIndex > 0 || _position.inSeconds > 3;
+
   AudioPlayer _preparePlayer() {
     final player = _player ??= AudioPlayer();
-    _stateSubscription ??= player.playerStateStream.listen((_) {
-      if (!_disposed) notifyListeners();
+    _stateSubscription ??= player.playerStateStream.listen((state) {
+      if (_disposed) return;
+      if (state.processingState == ProcessingState.completed) {
+        _onTrackCompleted();
+      }
+      notifyListeners();
     });
+
     _errorSubscription ??= player.errorStream.listen((_) {
       if (!_disposed) {
         _error = 'Playback failed. Check your connection or try another video.';
         notifyListeners();
       }
     });
+
+    _positionSubscription ??= player.positionStream.listen((pos) {
+      if (!_disposed) {
+        _position = pos;
+        notifyListeners();
+      }
+    });
+
+    _durationSubscription ??= player.durationStream.listen((dur) {
+      if (!_disposed && dur != null) {
+        _duration = dur;
+        notifyListeners();
+      }
+    });
+
+    _bufferedSubscription ??= player.bufferedPositionStream.listen((buf) {
+      if (!_disposed) {
+        _bufferedPosition = buf;
+        notifyListeners();
+      }
+    });
+
     return player;
   }
 
   Future<void> playItem(YoutubeSearchItem item) async {
-    // Keep stream resolution serial; result taps are disabled while loading.
     if (_disposed || _loading) return;
+    // If item is already in queue, jump to it. Otherwise, put it in queue.
+    final existingIndex = _queue.indexWhere((e) => e.id == item.id);
+    if (existingIndex >= 0) {
+      _currentIndex = existingIndex;
+    } else {
+      _queue.add(item);
+      _currentIndex = _queue.length - 1;
+    }
+    await _loadAndPlay(item);
+  }
+
+  Future<void> playQueue(
+    List<YoutubeSearchItem> items, {
+    int initialIndex = 0,
+  }) async {
+    if (items.isEmpty) return;
+    _queue.clear();
+    _queue.addAll(items);
+    _originalQueueOrder = List.of(items);
+    _currentIndex = initialIndex.clamp(0, _queue.length - 1);
+    await _loadAndPlay(_queue[_currentIndex]);
+  }
+
+  void addToQueue(YoutubeSearchItem item) {
+    if (!_queue.any((e) => e.id == item.id)) {
+      _queue.add(item);
+      notifyListeners();
+      if (_selected == null && !_loading) {
+        playItem(item);
+      }
+    }
+  }
+
+  void playNext(YoutubeSearchItem item) {
+    if (_queue.isEmpty || _currentIndex < 0) {
+      playItem(item);
+      return;
+    }
+    _queue.removeWhere((e) => e.id == item.id);
+    final insertIndex = (_currentIndex + 1).clamp(0, _queue.length);
+    _queue.insert(insertIndex, item);
+    notifyListeners();
+  }
+
+  void removeAt(int index) {
+    if (index < 0 || index >= _queue.length) return;
+    final isCurrent = index == _currentIndex;
+    _queue.removeAt(index);
+    if (_currentIndex > index) {
+      _currentIndex--;
+    } else if (isCurrent) {
+      if (_queue.isEmpty) {
+        _currentIndex = -1;
+        _selected = null;
+        _player?.stop();
+      } else {
+        _currentIndex = _currentIndex.clamp(0, _queue.length - 1);
+        _loadAndPlay(_queue[_currentIndex]);
+      }
+    }
+    notifyListeners();
+  }
+
+  void reorder(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= _queue.length) return;
+    if (newIndex > oldIndex) newIndex--;
+    final item = _queue.removeAt(oldIndex);
+    _queue.insert(newIndex, item);
+    if (_selected != null) {
+      _currentIndex = _queue.indexOf(_selected!);
+    }
+    notifyListeners();
+  }
+
+  void clearQueue() {
+    _queue.clear();
+    _currentIndex = -1;
+    _selected = null;
+    _player?.stop();
+    notifyListeners();
+  }
+
+  Future<void> _loadAndPlay(YoutubeSearchItem item) async {
+    if (_disposed) return;
     final request = ++_request;
     _selected = item;
     _error = null;
     _loading = true;
+    _position = Duration.zero;
+    _duration = item.duration ?? Duration.zero;
     notifyListeners();
 
     try {
       final player = _preparePlayer();
       await player.stop();
       if (_disposed) return;
-      final url = await _youtubeService.resolveAudioUrl(item.id);
-      if (_disposed) return;
-      await player.setUrl(url.toString()).timeout(const Duration(seconds: 20));
-      if (_disposed) return;
+
+      AudioSource audioSource;
+      final isOffline = _storageService?.isDownloaded(item.id) ?? false;
+      final downloadItem = _storageService?.getDownload(item.id);
+
+      final mediaItem = MediaItem(
+        id: item.id,
+        album: item.channelName,
+        title: item.title,
+        artUri: item.thumbnailUrl.isNotEmpty
+            ? Uri.tryParse(item.thumbnailUrl)
+            : null,
+        duration: item.duration,
+      );
+
+      if (isOffline &&
+          downloadItem != null &&
+          File(downloadItem.localPath).existsSync()) {
+        audioSource = AudioSource.file(downloadItem.localPath, tag: mediaItem);
+        await player.setAudioSource(audioSource).timeout(
+          const Duration(seconds: 20),
+        );
+      } else {
+        final highQuality = (_storageService?.audioQuality ?? 'high') == 'high';
+        final url = await _youtubeService.resolveAudioUrl(
+          item.id,
+          highQuality: highQuality,
+        );
+        if (_disposed) return;
+
+        audioSource = AudioSource.uri(
+          url,
+          tag: mediaItem,
+        );
+        await player.setAudioSource(audioSource).timeout(
+          const Duration(seconds: 20),
+        );
+      }
+
+      if (_disposed || request != _request) return;
       _loading = false;
       notifyListeners();
-      if (_foreground && _error == null) unawaited(_play(request));
+
+      // Record in play history
+      unawaited(_storageService?.addToHistory(item));
+
+      if ((_foreground || !_pauseOnBackground) && _error == null) {
+        unawaited(_play(request));
+      }
     } catch (error) {
       if (_disposed || request != _request) return;
       if (kDebugMode) debugPrint('Audio load failed: $error');
-      _error = error is TimeoutException
+      final errStr = error.toString();
+      _error = errStr.contains('403')
+          ? 'YouTube restricted playback for this video (403). Try another video.'
+          : error is TimeoutException
           ? 'Audio loading timed out. Check your connection and retry.'
           : 'Could not play this video. Check your connection or try another video.';
-      // Also cancels an audio load that continued after its timeout.
       try {
         await _player?.stop();
-      } catch (_) {
-        // Preserve the original load error.
-      }
+      } catch (_) {}
       if (!_disposed) {
         _loading = false;
         notifyListeners();
@@ -89,7 +282,7 @@ class PlaybackController extends ChangeNotifier {
   Future<void> togglePlayback() async {
     if (_disposed || _loading || _selected == null) return;
     if (_error != null) {
-      await playItem(_selected!);
+      await _loadAndPlay(_selected!);
       return;
     }
     final player = _player;
@@ -99,7 +292,9 @@ class PlaybackController extends ChangeNotifier {
         await player.pause();
       } else {
         if (isCompleted) await player.seek(Duration.zero);
-        if (!_disposed && _foreground) unawaited(_play(_request));
+        if (!_disposed && (_foreground || !_pauseOnBackground)) {
+          unawaited(_play(_request));
+        }
       }
     } catch (_) {
       if (!_disposed) {
@@ -109,9 +304,127 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
+  Future<void> skipToNext() async {
+    if (_disposed || _loading) return;
+
+    if (_currentIndex + 1 < _queue.length) {
+      _currentIndex++;
+      await _loadAndPlay(_queue[_currentIndex]);
+      return;
+    }
+
+    if (_loopMode == PlaybackLoopMode.all && _queue.isNotEmpty) {
+      _currentIndex = 0;
+      await _loadAndPlay(_queue[0]);
+      return;
+    }
+
+    // Autoplay: fetch related videos if enabled
+    if ((_storageService != null && _storageService.autoplay) && _selected != null) {
+      try {
+        final related = await _youtubeService.getRelatedVideos(_selected!);
+        if (_disposed) return;
+        final unplayed = related.where((r) => !_queue.any((q) => q.id == r.id));
+        if (unplayed.isNotEmpty) {
+          final nextItem = unplayed.first;
+          _queue.add(nextItem);
+          _currentIndex = _queue.length - 1;
+          await _loadAndPlay(nextItem);
+          return;
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('Autoplay fetch failed: $e');
+      }
+    }
+
+    // Otherwise stop playback
+    await _player?.stop();
+  }
+
+  Future<void> skipToPrevious() async {
+    if (_disposed || _loading) return;
+
+    if (_position.inSeconds > 3) {
+      await seek(Duration.zero);
+      return;
+    }
+
+    if (_currentIndex > 0) {
+      _currentIndex--;
+      await _loadAndPlay(_queue[_currentIndex]);
+    } else {
+      await seek(Duration.zero);
+    }
+  }
+
+  Future<void> seek(Duration position) async {
+    if (_disposed || _player == null) return;
+    try {
+      await _player!.seek(position);
+    } catch (_) {}
+  }
+
+  void setLoopMode(PlaybackLoopMode mode) {
+    _loopMode = mode;
+    notifyListeners();
+  }
+
+  void toggleLoopMode() {
+    switch (_loopMode) {
+      case PlaybackLoopMode.off:
+        setLoopMode(PlaybackLoopMode.all);
+        break;
+      case PlaybackLoopMode.all:
+        setLoopMode(PlaybackLoopMode.one);
+        break;
+      case PlaybackLoopMode.one:
+        setLoopMode(PlaybackLoopMode.off);
+        break;
+    }
+  }
+
+  void toggleShuffle() {
+    _isShuffle = !_isShuffle;
+    if (_isShuffle) {
+      _originalQueueOrder = List.of(_queue);
+      if (_selected != null) {
+        final remaining = _queue.where((e) => e.id != _selected!.id).toList()
+          ..shuffle();
+        _queue.clear();
+        _queue.add(_selected!);
+        _queue.addAll(remaining);
+        _currentIndex = 0;
+      } else {
+        _queue.shuffle();
+      }
+    } else {
+      if (_originalQueueOrder.isNotEmpty) {
+        _queue.clear();
+        _queue.addAll(_originalQueueOrder);
+        if (_selected != null) {
+          _currentIndex = _queue.indexOf(_selected!);
+        }
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> _onTrackCompleted() async {
+    if (_disposed) return;
+    if (_loopMode == PlaybackLoopMode.one) {
+      await seek(Duration.zero);
+      unawaited(_play(_request));
+      return;
+    }
+    if (_currentIndex + 1 < _queue.length ||
+        (_loopMode == PlaybackLoopMode.all && _queue.isNotEmpty) ||
+        (_storageService != null && _storageService.autoplay)) {
+      await skipToNext();
+    }
+  }
+
   Future<void> _play(int request) async {
     try {
-      // play() completes when paused, stopped, or finished, not when started.
       await _player!.play();
     } catch (_) {
       if (!_disposed && request == _request) {
@@ -123,12 +436,10 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> setForeground(bool foreground) async {
     _foreground = foreground;
-    if (!_disposed && !foreground) {
+    if (_pauseOnBackground && !_disposed && !foreground) {
       try {
         await _player?.pause();
-      } catch (_) {
-        // A player may already be stopping after a load failure.
-      }
+      } catch (_) {}
     }
   }
 
@@ -138,6 +449,9 @@ class PlaybackController extends ChangeNotifier {
     _request++;
     unawaited(_stateSubscription?.cancel());
     unawaited(_errorSubscription?.cancel());
+    unawaited(_positionSubscription?.cancel());
+    unawaited(_durationSubscription?.cancel());
+    unawaited(_bufferedSubscription?.cancel());
     unawaited(_player?.dispose());
     super.dispose();
   }

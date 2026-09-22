@@ -3,63 +3,91 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/youtube_search_item.dart';
+import '../services/download_service.dart';
 import '../services/playback_controller.dart';
+import '../services/storage_service.dart';
 import '../services/youtube_service.dart';
 import '../widgets/playback_bar.dart';
+import '../widgets/track_tile.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key, this.youtubeService, this.playbackController});
+  const SearchScreen({
+    super.key,
+    this.youtubeService,
+    this.playbackController,
+    this.storageService,
+    this.downloadService,
+    this.showBottomPlayer = true,
+  });
 
   final YoutubeService? youtubeService;
   final PlaybackController? playbackController;
+  final StorageService? storageService;
+  final DownloadService? downloadService;
+  final bool showBottomPlayer;
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen>
-    with WidgetsBindingObserver {
+class _SearchScreenState extends State<SearchScreen> {
   final _queryController = TextEditingController();
   late final _youtubeService = widget.youtubeService ?? YoutubeService();
+  late final _storage = widget.storageService ?? StorageService();
   late final _playback =
       widget.playbackController ??
-      PlaybackController(youtubeService: _youtubeService);
+      PlaybackController(
+        youtubeService: _youtubeService,
+        storageService: _storage,
+      );
+  late final _downloadService =
+      widget.downloadService ?? DownloadService(storageService: _storage);
+
   List<YoutubeSearchItem> _results = [];
   bool _isLoading = false;
   bool _hasSearched = false;
   String? _inputError;
   String? _searchError;
 
+  final List<String> _quickTags = [
+    'Lofi Beats',
+    'Ambient Study',
+    'Synthwave',
+    'Jazz Classics',
+    'Acoustic Guitar',
+    'Deep Focus',
+  ];
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _playback.addListener(_updatePlayback);
+    _playback.addListener(_update);
+    _storage.addListener(_update);
+    _downloadService.addListener(_update);
   }
 
-  void _updatePlayback() {
+  void _update() {
     if (mounted) setState(() {});
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // This milestone deliberately supports foreground playback only.
-    unawaited(_playback.setForeground(state == AppLifecycleState.resumed));
-  }
-
-  @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _playback.removeListener(_updatePlayback);
+    _playback.removeListener(_update);
+    _storage.removeListener(_update);
+    _downloadService.removeListener(_update);
     if (widget.playbackController == null) _playback.dispose();
     _queryController.dispose();
     super.dispose();
   }
 
-  Future<void> _search() async {
+  Future<void> _search([String? customQuery]) async {
     if (_isLoading) return;
 
-    final query = _queryController.text.trim();
+    final query = (customQuery ?? _queryController.text).trim();
+    if (customQuery != null) {
+      _queryController.text = customQuery;
+    }
+
     if (query.isEmpty) {
       setState(() => _inputError = 'Enter something to search for.');
       return;
@@ -99,14 +127,22 @@ class _SearchScreenState extends State<SearchScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Shuno')),
-      bottomNavigationBar: _playback.selected == null
-          ? null
-          : SafeArea(top: false, child: PlaybackBar(controller: _playback)),
+      bottomNavigationBar:
+          widget.showBottomPlayer && _playback.selected != null
+          ? SafeArea(
+              top: false,
+              child: PlaybackBar(
+                controller: _playback,
+                storageService: _storage,
+                downloadService: _downloadService,
+              ),
+            )
+          : null,
       body: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -122,20 +158,64 @@ class _SearchScreenState extends State<SearchScreen>
                     },
                     decoration: InputDecoration(
                       labelText: 'Search YouTube',
-                      hintText: 'Song, artist, or video',
+                      hintText: 'Song, artist, or album',
                       prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _queryController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _queryController.clear();
+                                setState(() {});
+                              },
+                            )
+                          : null,
                       errorText: _inputError,
                     ),
                   ),
                   const SizedBox(height: 12),
                   FilledButton.icon(
-                    onPressed: _isLoading ? null : _search,
+                    onPressed: _isLoading ? null : () => _search(),
                     icon: const Icon(Icons.search),
                     label: const Text('Search'),
+                  ),
+                  const SizedBox(height: 8),
+                  // Quick search chips
+                  SizedBox(
+                    height: 36,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _quickTags.length,
+                      separatorBuilder: (context, index) => const SizedBox(width: 8),
+                      itemBuilder: (context, index) {
+                        final tag = _quickTags[index];
+                        return ActionChip(
+                          label: Text(tag, style: const TextStyle(fontSize: 12)),
+                          onPressed: _isLoading ? null : () => _search(tag),
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),
             ),
+            if (_results.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${_results.length} results',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    FilledButton.tonalIcon(
+                      icon: const Icon(Icons.play_arrow, size: 18),
+                      label: const Text('Play All'),
+                      onPressed: () => _playback.playQueue(_results),
+                    ),
+                  ],
+                ),
+              ),
             Expanded(child: _buildResults()),
           ],
         ),
@@ -166,71 +246,16 @@ class _SearchScreenState extends State<SearchScreen>
       );
     }
 
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+    return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 100),
       itemCount: _results.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final item = _results[index];
-        final duration = item.durationLabel;
-        return Card(
-          margin: EdgeInsets.zero,
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: _playback.isLoading ? null : () => _playback.playItem(item),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      item.thumbnailUrl,
-                      width: 104,
-                      height: 64,
-                      fit: BoxFit.cover,
-                      excludeFromSemantics: true,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const SizedBox(
-                            width: 104,
-                            height: 64,
-                            child: Icon(Icons.image_not_supported_outlined),
-                          ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.title,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          item.channelName,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        if (duration != null) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            duration,
-                            style: Theme.of(context).textTheme.labelSmall,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        return TrackTile(
+          item: item,
+          playback: _playback,
+          storage: _storage,
+          downloadService: _downloadService,
         );
       },
     );

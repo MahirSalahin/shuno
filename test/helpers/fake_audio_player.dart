@@ -5,6 +5,10 @@ import 'package:just_audio/just_audio.dart';
 class FakeAudioPlayer implements AudioPlayer {
   final states = StreamController<PlayerState>.broadcast(sync: true);
   final errors = StreamController<PlayerException>.broadcast(sync: true);
+  final positions = StreamController<Duration>.broadcast(sync: true);
+  final durations = StreamController<Duration?>.broadcast(sync: true);
+  final bufferedPositions = StreamController<Duration>.broadcast(sync: true);
+
   final loadedUrls = <String>[];
   final seeks = <Duration?>[];
   bool disposed = false;
@@ -24,10 +28,36 @@ class FakeAudioPlayer implements AudioPlayer {
   @override
   Stream<PlayerException> get errorStream => errors.stream;
 
+  @override
+  Stream<Duration> get positionStream => positions.stream;
+
+  @override
+  Stream<Duration?> get durationStream => durations.stream;
+
+  @override
+  Stream<Duration> get bufferedPositionStream => bufferedPositions.stream;
+
   void emit(ProcessingState state, {bool? isPlaying}) {
+    if (disposed) return;
     processingState = state;
     playing = isPlaying ?? playing;
     states.add(PlayerState(playing, processingState));
+  }
+
+  @override
+  Future<Duration?> setAudioSource(
+    AudioSource source, {
+    bool preload = true,
+    int? initialIndex,
+    Duration? initialPosition,
+  }) async {
+    if (source is UriAudioSource) {
+      loadedUrls.add(source.uri.toString());
+    }
+    if (loadError != null) throw loadError!;
+    if (pendingLoad != null) return pendingLoad!.future;
+    emit(ProcessingState.ready);
+    return const Duration(minutes: 3);
   }
 
   @override
@@ -68,6 +98,9 @@ class FakeAudioPlayer implements AudioPlayer {
     disposed = true;
     await states.close();
     await errors.close();
+    await positions.close();
+    await durations.close();
+    await bufferedPositions.close();
   }
 
   @override
