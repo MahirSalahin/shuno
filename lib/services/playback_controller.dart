@@ -51,6 +51,12 @@ class PlaybackController extends ChangeNotifier {
   Duration _duration = Duration.zero;
   Duration _bufferedPosition = Duration.zero;
 
+  Timer? _sleepTimer;
+  Timer? _sleepTimerTicker;
+  DateTime? _sleepTimerEndTime;
+  bool _sleepAtEndOfTrack = false;
+  DateTime _lastPositionSave = DateTime.fromMillisecondsSinceEpoch(0);
+
   List<YoutubeSearchItem> get queue => List.unmodifiable(_queue);
   int get currentIndex => _currentIndex;
   YoutubeSearchItem? get selected => _selected;
@@ -72,6 +78,71 @@ class PlaybackController extends ChangeNotifier {
       (_storageService != null && _storageService.autoplay);
   bool get hasPrevious => _currentIndex > 0 || _position.inSeconds > 3;
 
+  bool get hasSleepTimer => _sleepTimer != null || _sleepAtEndOfTrack;
+  bool get isSleepAtEndOfTrack => _sleepAtEndOfTrack;
+  Duration? get sleepTimerRemaining {
+    if (_sleepTimerEndTime == null) return null;
+    final diff = _sleepTimerEndTime!.difference(DateTime.now());
+    return diff.isNegative ? Duration.zero : diff;
+  }
+
+  String? get sleepTimerRemainingFormatted {
+    if (_sleepAtEndOfTrack) return 'End of track';
+    final rem = sleepTimerRemaining;
+    if (rem == null) return null;
+    final minutes = rem.inMinutes;
+    final seconds = rem.inSeconds % 60;
+    if (minutes > 0) {
+      return '${minutes}m ${seconds}s';
+    }
+    return '${seconds}s';
+  }
+
+  void setSleepTimer(Duration? duration, {bool endOfTrack = false}) {
+    cancelSleepTimer();
+    if (endOfTrack) {
+      _sleepAtEndOfTrack = true;
+      notifyListeners();
+      return;
+    }
+    if (duration != null && duration > Duration.zero) {
+      _sleepTimerEndTime = DateTime.now().add(duration);
+      _sleepTimer = Timer(duration, () {
+        cancelSleepTimer();
+        _player?.pause();
+        notifyListeners();
+      });
+      _sleepTimerTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!_disposed) {
+          notifyListeners();
+        }
+      });
+      notifyListeners();
+    }
+  }
+
+  void cancelSleepTimer() {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    _sleepTimerTicker?.cancel();
+    _sleepTimerTicker = null;
+    _sleepTimerEndTime = null;
+    _sleepAtEndOfTrack = false;
+    notifyListeners();
+  }
+
+  void _saveOfflinePositionIfNeeded(Duration pos, {bool force = false}) {
+    final sel = _selected;
+    if (sel == null || _storageService == null) return;
+    if (!_storageService.isDownloaded(sel.id)) return;
+
+    final now = DateTime.now();
+    if (force || now.difference(_lastPositionSave).inSeconds >= 3) {
+      _lastPositionSave = now;
+      _storageService.updatePlaybackPosition(sel.id, pos);
+    }
+  }
+
   AudioPlayer _preparePlayer() {
     final player = _player ??= AudioPlayer();
     _stateSubscription ??= player.playerStateStream.listen((state) {
@@ -92,6 +163,7 @@ class PlaybackController extends ChangeNotifier {
     _positionSubscription ??= player.positionStream.listen((pos) {
       if (!_disposed) {
         _position = pos;
+        _saveOfflinePositionIfNeeded(pos);
         notifyListeners();
       }
     });
@@ -113,7 +185,7 @@ class PlaybackController extends ChangeNotifier {
     return player;
   }
 
-  Future<void> playItem(YoutubeSearchItem item) async {
+  Future<void> playItem(YoutubeSearchItem item, {Duration? initialPosition}) async {
     if (_disposed || _loading) return;
     // If item is already in queue, jump to it. Otherwise, put it in queue.
     final existingIndex = _queue.indexWhere((e) => e.id == item.id);
@@ -123,7 +195,7 @@ class PlaybackController extends ChangeNotifier {
       _queue.add(item);
       _currentIndex = _queue.length - 1;
     }
-    await _loadAndPlay(item);
+    await _loadAndPlay(item, initialPosition: initialPosition);
   }
 
   Future<void> playQueue(
@@ -197,13 +269,22 @@ class PlaybackController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _loadAndPlay(YoutubeSearchItem item) async {
+  Future<void> _loadAndPlay(
+    YoutubeSearchItem item, {
+    Duration? initialPosition,
+  }) async {
     if (_disposed) return;
     final request = ++_request;
+
+    // Save playback position of outgoing offline track if any
+    if (_selected != null && _storageService != null && _position > Duration.zero) {
+      _saveOfflinePositionIfNeeded(_position, force: true);
+    }
+
     _selected = item;
     _error = null;
     _loading = true;
-    _position = Duration.zero;
+    _position = initialPosition ?? Duration.zero;
     _duration = item.duration ?? Duration.zero;
     notifyListeners();
 
@@ -215,6 +296,18 @@ class PlaybackController extends ChangeNotifier {
       AudioSource audioSource;
       final isOffline = _storageService?.isDownloaded(item.id) ?? false;
       final downloadItem = _storageService?.getDownload(item.id);
+
+      // Determine initial seek position: explicit or stored progress
+      Duration? startPos = initialPosition;
+      if (startPos == null &&
+          isOffline &&
+          downloadItem != null &&
+          downloadItem.hasPlaybackProgress) {
+        startPos = downloadItem.lastPosition;
+      }
+      if (startPos != null) {
+        _position = startPos;
+      }
 
       final mediaItem = MediaItem(
         id: item.id,
@@ -230,7 +323,10 @@ class PlaybackController extends ChangeNotifier {
           downloadItem != null &&
           File(downloadItem.localPath).existsSync()) {
         audioSource = AudioSource.file(downloadItem.localPath, tag: mediaItem);
-        await player.setAudioSource(audioSource).timeout(
+        await player.setAudioSource(
+          audioSource,
+          initialPosition: startPos,
+        ).timeout(
           const Duration(seconds: 20),
         );
       } else {
@@ -245,7 +341,10 @@ class PlaybackController extends ChangeNotifier {
           url,
           tag: mediaItem,
         );
-        await player.setAudioSource(audioSource).timeout(
+        await player.setAudioSource(
+          audioSource,
+          initialPosition: startPos,
+        ).timeout(
           const Duration(seconds: 20),
         );
       }
@@ -289,6 +388,7 @@ class PlaybackController extends ChangeNotifier {
     if (player == null) return;
     try {
       if (isPlaying) {
+        _saveOfflinePositionIfNeeded(_position, force: true);
         await player.pause();
       } else {
         if (isCompleted) await player.seek(Duration.zero);
@@ -361,6 +461,9 @@ class PlaybackController extends ChangeNotifier {
     if (_disposed || _player == null) return;
     try {
       await _player!.seek(position);
+      _position = position;
+      _saveOfflinePositionIfNeeded(position, force: true);
+      notifyListeners();
     } catch (_) {}
   }
 
@@ -411,6 +514,19 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> _onTrackCompleted() async {
     if (_disposed) return;
+
+    // Reset offline progress for completed track
+    if (_selected != null && _storageService != null) {
+      _storageService.clearPlaybackPosition(_selected!.id);
+    }
+
+    // Check sleep at end of track
+    if (_sleepAtEndOfTrack) {
+      cancelSleepTimer();
+      await _player?.pause();
+      return;
+    }
+
     if (_loopMode == PlaybackLoopMode.one) {
       await seek(Duration.zero);
       unawaited(_play(_request));
@@ -447,6 +563,10 @@ class PlaybackController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _request++;
+    if (_selected != null && _position > Duration.zero) {
+      _saveOfflinePositionIfNeeded(_position, force: true);
+    }
+    cancelSleepTimer();
     unawaited(_stateSubscription?.cancel());
     unawaited(_errorSubscription?.cancel());
     unawaited(_positionSubscription?.cancel());

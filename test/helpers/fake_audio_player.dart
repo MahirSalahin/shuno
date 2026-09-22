@@ -15,6 +15,7 @@ class FakeAudioPlayer implements AudioPlayer {
   Object? loadError;
   Completer<Duration?>? pendingLoad;
   int stopCount = 0;
+  Duration? lastInitialPosition;
 
   @override
   bool playing = false;
@@ -51,6 +52,7 @@ class FakeAudioPlayer implements AudioPlayer {
     int? initialIndex,
     Duration? initialPosition,
   }) async {
+    lastInitialPosition = initialPosition;
     if (source is UriAudioSource) {
       loadedUrls.add(source.uri.toString());
     }

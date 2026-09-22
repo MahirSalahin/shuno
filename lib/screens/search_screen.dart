@@ -95,6 +95,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
     FocusScope.of(context).unfocus();
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    unawaited(_storage.addRecentSearch(query));
     setState(() {
       _isLoading = true;
       _hasSearched = true;
@@ -230,18 +231,69 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
 
-    final message =
-        _searchError ??
-        (!_hasSearched
-            ? 'Search YouTube to get started.'
-            : _results.isEmpty
-            ? 'No videos found. Try a different search.'
-            : null);
-    if (message != null) {
+    if (_searchError != null) {
       return Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: Text(message, textAlign: TextAlign.center),
+          child: Text(_searchError!, textAlign: TextAlign.center),
+        ),
+      );
+    }
+
+    if (!_hasSearched) {
+      final recents = _storage.recentSearches;
+      if (recents.isNotEmpty) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'RECENT SEARCHES',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          letterSpacing: 1.2,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                  TextButton(
+                    onPressed: () => _storage.clearRecentSearches(),
+                    child: const Text('Clear All'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: recents.map((query) {
+                  return InputChip(
+                    avatar: const Icon(Icons.history, size: 16),
+                    label: Text(query),
+                    onPressed: () => _search(query),
+                    onDeleted: () => _storage.removeRecentSearch(query),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        );
+      }
+      return const Center(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(24),
+          child: Text('Search YouTube to get started.', textAlign: TextAlign.center),
+        ),
+      );
+    }
+
+    if (_results.isEmpty) {
+      return const Center(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(24),
+          child: Text('No videos found. Try a different search.', textAlign: TextAlign.center),
         ),
       );
     }

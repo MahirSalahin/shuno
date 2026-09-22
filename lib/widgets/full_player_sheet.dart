@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/download_service.dart';
@@ -5,7 +7,7 @@ import '../services/playback_controller.dart';
 import '../services/storage_service.dart';
 import 'add_to_playlist_dialog.dart';
 
-class FullPlayerSheet extends StatelessWidget {
+class FullPlayerSheet extends StatefulWidget {
   const FullPlayerSheet({
     super.key,
     required this.playback,
@@ -47,6 +49,139 @@ class FullPlayerSheet extends StatelessWidget {
     );
   }
 
+  @override
+  State<FullPlayerSheet> createState() => _FullPlayerSheetState();
+}
+
+class _FullPlayerSheetState extends State<FullPlayerSheet> {
+  int _seekFeedback = 0; // -10 or +10
+  Timer? _seekFeedbackTimer;
+
+  @override
+  void dispose() {
+    _seekFeedbackTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onDoubleTapDown(TapDownDetails details, double width) {
+    final isLeft = details.localPosition.dx < width / 2;
+    final delta = isLeft ? -10 : 10;
+    final current = widget.playback.position;
+    final duration = widget.playback.duration;
+    final newSeconds = (current.inSeconds + delta).clamp(
+      0,
+      duration.inSeconds > 0 ? duration.inSeconds : 0,
+    );
+    widget.playback.seek(Duration(seconds: newSeconds));
+
+    setState(() {
+      _seekFeedback = delta;
+    });
+    _seekFeedbackTimer?.cancel();
+    _seekFeedbackTimer = Timer(const Duration(milliseconds: 650), () {
+      if (mounted) setState(() => _seekFeedback = 0);
+    });
+  }
+
+  void _showSleepTimerPicker(BuildContext context) {
+    final theme = Theme.of(context);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: theme.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Row(
+                children: [
+                  const Icon(Icons.bedtime, size: 22),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Sleep Timer',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (widget.playback.hasSleepTimer)
+                    TextButton(
+                      onPressed: () {
+                        widget.playback.cancelSleepTimer();
+                        Navigator.of(ctx).pop();
+                      },
+                      child: const Text('Turn Off'),
+                    ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.timer_outlined),
+              title: const Text('15 minutes'),
+              trailing: widget.playback.sleepTimerRemaining?.inMinutes == 15
+                  ? const Icon(Icons.check, color: Colors.green)
+                  : null,
+              onTap: () {
+                widget.playback.setSleepTimer(const Duration(minutes: 15));
+                Navigator.of(ctx).pop();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.timer_outlined),
+              title: const Text('30 minutes'),
+              trailing: widget.playback.sleepTimerRemaining?.inMinutes == 30
+                  ? const Icon(Icons.check, color: Colors.green)
+                  : null,
+              onTap: () {
+                widget.playback.setSleepTimer(const Duration(minutes: 30));
+                Navigator.of(ctx).pop();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.timer_outlined),
+              title: const Text('45 minutes'),
+              trailing: widget.playback.sleepTimerRemaining?.inMinutes == 45
+                  ? const Icon(Icons.check, color: Colors.green)
+                  : null,
+              onTap: () {
+                widget.playback.setSleepTimer(const Duration(minutes: 45));
+                Navigator.of(ctx).pop();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.timer_outlined),
+              title: const Text('60 minutes'),
+              trailing: widget.playback.sleepTimerRemaining?.inMinutes == 60
+                  ? const Icon(Icons.check, color: Colors.green)
+                  : null,
+              onTap: () {
+                widget.playback.setSleepTimer(const Duration(minutes: 60));
+                Navigator.of(ctx).pop();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.music_off_outlined),
+              title: const Text('End of track'),
+              trailing: widget.playback.isSleepAtEndOfTrack
+                  ? const Icon(Icons.check, color: Colors.green)
+                  : null,
+              onTap: () {
+                widget.playback.setSleepTimer(null, endOfTrack: true);
+                Navigator.of(ctx).pop();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _formatDuration(Duration duration) {
     final minutes = duration.inMinutes;
     final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
@@ -60,7 +195,11 @@ class FullPlayerSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final playback = widget.playback;
+    final storage = widget.storage;
+    final downloadService = widget.downloadService;
     final item = playback.selected;
+
     if (item == null) {
       return const SizedBox(
         height: 300,
@@ -101,6 +240,7 @@ class FullPlayerSheet extends StatelessWidget {
                 ),
               ),
             ),
+
             // Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -117,54 +257,125 @@ class FullPlayerSheet extends StatelessWidget {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.playlist_add),
-                  tooltip: 'Add to playlist',
-                  onPressed: () => AddToPlaylistDialog.show(
-                    context,
-                    item: item,
-                    storageService: storage,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Sleep Timer Header Icon
+                    IconButton(
+                      icon: Icon(
+                        playback.hasSleepTimer
+                            ? Icons.bedtime
+                            : Icons.bedtime_outlined,
+                        color: playback.hasSleepTimer
+                            ? theme.colorScheme.primary
+                            : null,
+                      ),
+                      tooltip: playback.hasSleepTimer
+                          ? 'Timer: ${playback.sleepTimerRemainingFormatted}'
+                          : 'Set sleep timer',
+                      onPressed: () => _showSleepTimerPicker(context),
+                    ),
+                    // Add to Playlist Icon
+                    IconButton(
+                      icon: const Icon(Icons.playlist_add),
+                      tooltip: 'Add to playlist',
+                      onPressed: () => AddToPlaylistDialog.show(
+                        context,
+                        item: item,
+                        storageService: storage,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
             const SizedBox(height: 12),
 
-            // Artwork
+            // Artwork with Double-Tap to Seek (+/- 10s)
             Center(
-              child: AspectRatio(
-                aspectRatio: 1,
-                child: Container(
-                  constraints: const BoxConstraints(maxHeight: 320),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.35),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: item.thumbnailUrl.isNotEmpty
-                        ? Image.network(
-                            item.thumbnailUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                Container(
-                                  color:
-                                      theme.colorScheme.surfaceContainerHighest,
-                                  child: const Icon(Icons.music_note, size: 80),
-                                ),
-                          )
-                        : Container(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                            child: const Icon(Icons.music_note, size: 80),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final artworkWidth = constraints.maxWidth.clamp(0.0, 320.0);
+                  return GestureDetector(
+                    onDoubleTapDown: (details) =>
+                        _onDoubleTapDown(details, artworkWidth),
+                    child: Container(
+                      width: artworkWidth,
+                      height: artworkWidth,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withAlpha(89),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
                           ),
-                  ),
-                ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            item.thumbnailUrl.isNotEmpty
+                                ? Image.network(
+                                    item.thumbnailUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder:
+                                        (context, error, stackTrace) =>
+                                            Container(
+                                      color: theme
+                                          .colorScheme.surfaceContainerHighest,
+                                      child: const Icon(
+                                        Icons.music_note,
+                                        size: 80,
+                                      ),
+                                    ),
+                                  )
+                                : Container(
+                                    color: theme
+                                        .colorScheme.surfaceContainerHighest,
+                                    child: const Icon(
+                                      Icons.music_note,
+                                      size: 80,
+                                    ),
+                                  ),
+
+                            // Seek Feedback Overlay
+                            if (_seekFeedback != 0)
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                color: Colors.black54,
+                                child: Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _seekFeedback < 0
+                                            ? Icons.replay_10
+                                            : Icons.forward_10,
+                                        size: 56,
+                                        color: Colors.white,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        _seekFeedback < 0 ? '-10s' : '+10s',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
             const SizedBox(height: 20),
@@ -332,11 +543,11 @@ class FullPlayerSheet extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Bottom Actions: Download and Queue
+            // Bottom Actions: Download, Sleep Timer status, and Queue
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                // Download
+                // Download Button
                 if (isDownloading)
                   TextButton.icon(
                     icon: const SizedBox(
@@ -371,7 +582,7 @@ class FullPlayerSheet extends StatelessWidget {
                     label: const Text('Download'),
                     onPressed: () {
                       if (downloadService != null) {
-                        downloadService!.downloadTrack(item);
+                        downloadService.downloadTrack(item);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text('Downloading "${item.title}"...'),
@@ -381,13 +592,25 @@ class FullPlayerSheet extends StatelessWidget {
                       }
                     },
                   ),
+
+                // Sleep Timer status indicator
+                if (playback.hasSleepTimer)
+                  ActionChip(
+                    avatar: const Icon(Icons.bedtime, size: 16),
+                    label: Text(
+                      playback.sleepTimerRemainingFormatted ?? 'Timer',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    onPressed: () => _showSleepTimerPicker(context),
+                  ),
+
                 // Queue Shortcut
                 TextButton.icon(
                   icon: const Icon(Icons.queue_music),
                   label: Text('Queue (${playback.queue.length})'),
                   onPressed: () {
                     Navigator.of(context).pop();
-                    onOpenQueue?.call();
+                    widget.onOpenQueue?.call();
                   },
                 ),
               ],

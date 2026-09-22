@@ -226,31 +226,50 @@ class _LibraryScreenState extends State<LibraryScreen>
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline, size: 20),
-                        tooltip: 'Delete playlist',
-                        onPressed: () async {
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Delete Playlist'),
-                              content: Text('Delete "${pl.title}"?'),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.of(ctx).pop(false),
-                                  child: const Text('Cancel'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.play_circle_fill, size: 28),
+                            color: theme.colorScheme.primary,
+                            tooltip: 'Play playlist',
+                            visualDensity: VisualDensity.compact,
+                            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                            padding: const EdgeInsets.all(4),
+                            onPressed: pl.items.isNotEmpty
+                                ? () => widget.playback.playQueue(pl.items)
+                                : null,
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 20),
+                            tooltip: 'Delete playlist',
+                            visualDensity: VisualDensity.compact,
+                            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                            padding: const EdgeInsets.all(4),
+                            onPressed: () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Delete Playlist'),
+                                  content: Text('Delete "${pl.title}"?'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.of(ctx).pop(false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () => Navigator.of(ctx).pop(true),
+                                      child: const Text('Delete'),
+                                    ),
+                                  ],
                                 ),
-                                FilledButton(
-                                  onPressed: () => Navigator.of(ctx).pop(true),
-                                  child: const Text('Delete'),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (confirm == true) {
-                            widget.storage.deletePlaylist(pl.id);
-                          }
-                        },
+                              );
+                              if (confirm == true) {
+                                widget.storage.deletePlaylist(pl.id);
+                              }
+                            },
+                          ),
+                        ],
                       ),
                       onTap: () {
                         Navigator.of(context).push(

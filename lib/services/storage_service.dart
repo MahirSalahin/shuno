@@ -16,6 +16,7 @@ class StorageService extends ChangeNotifier {
   final List<YoutubeSearchItem> _history = [];
   final List<Playlist> _playlists = [];
   final List<DownloadItem> _downloads = [];
+  final List<String> _recentSearches = [];
   bool _autoplay = true;
   String _audioQuality = 'high'; // 'high' or 'saver'
 
@@ -23,6 +24,7 @@ class StorageService extends ChangeNotifier {
   List<YoutubeSearchItem> get history => List.unmodifiable(_history);
   List<Playlist> get playlists => List.unmodifiable(_playlists);
   List<DownloadItem> get downloads => List.unmodifiable(_downloads);
+  List<String> get recentSearches => List.unmodifiable(_recentSearches);
   bool get autoplay => _autoplay;
   String get audioQuality => _audioQuality;
   bool get isInitialized => _initialized;
@@ -86,6 +88,15 @@ class StorageService extends ChangeNotifier {
         }
       }
 
+      _recentSearches.clear();
+      if (data['recentSearches'] is List) {
+        for (final item in data['recentSearches'] as List) {
+          if (item is String && item.trim().isNotEmpty) {
+            _recentSearches.add(item.trim());
+          }
+        }
+      }
+
       if (data['autoplay'] is bool) {
         _autoplay = data['autoplay'] as bool;
       }
@@ -107,6 +118,7 @@ class StorageService extends ChangeNotifier {
         'history': _history.map((e) => e.toJson()).toList(),
         'playlists': _playlists.map((e) => e.toJson()).toList(),
         'downloads': _downloads.map((e) => e.toJson()).toList(),
+        'recentSearches': _recentSearches,
         'autoplay': _autoplay,
         'audioQuality': _audioQuality,
       };
@@ -208,6 +220,28 @@ class StorageService extends ChangeNotifier {
     }
   }
 
+  Future<int> addTracksToPlaylist(
+    String playlistId,
+    List<YoutubeSearchItem> items,
+  ) async {
+    final index = _playlists.indexWhere((p) => p.id == playlistId);
+    if (index >= 0) {
+      int added = 0;
+      for (final item in items) {
+        if (!_playlists[index].items.any((e) => e.id == item.id)) {
+          _playlists[index].items.add(item);
+          added++;
+        }
+      }
+      if (added > 0) {
+        notifyListeners();
+        await _saveToDisk();
+      }
+      return added;
+    }
+    return 0;
+  }
+
   // --- Downloads ---
   bool isDownloaded(String videoId) {
     return _downloads.any((d) => d.item.id == videoId);
@@ -234,6 +268,59 @@ class StorageService extends ChangeNotifier {
     await _saveToDisk();
   }
 
+  Future<void> updatePlaybackPosition(String videoId, Duration position) async {
+    final index = _downloads.indexWhere((d) => d.item.id == videoId);
+    if (index >= 0) {
+      final current = _downloads[index];
+      // Only write if position changed meaningfully (> 1 sec)
+      if ((current.lastPositionMs - position.inMilliseconds).abs() > 1000) {
+        _downloads[index] = current.copyWith(
+          lastPositionMs: position.inMilliseconds,
+          lastPlayedAt: DateTime.now(),
+        );
+        notifyListeners();
+        await _saveToDisk();
+      }
+    }
+  }
+
+  Future<void> clearPlaybackPosition(String videoId) async {
+    final index = _downloads.indexWhere((d) => d.item.id == videoId);
+    if (index >= 0) {
+      _downloads[index] = _downloads[index].copyWith(
+        lastPositionMs: 0,
+        lastPlayedAt: null,
+      );
+      notifyListeners();
+      await _saveToDisk();
+    }
+  }
+
+  // --- Recent Searches ---
+  Future<void> addRecentSearch(String query) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return;
+    _recentSearches.removeWhere((q) => q.toLowerCase() == trimmed.toLowerCase());
+    _recentSearches.insert(0, trimmed);
+    if (_recentSearches.length > 20) {
+      _recentSearches.removeRange(20, _recentSearches.length);
+    }
+    notifyListeners();
+    await _saveToDisk();
+  }
+
+  Future<void> removeRecentSearch(String query) async {
+    _recentSearches.removeWhere((q) => q == query);
+    notifyListeners();
+    await _saveToDisk();
+  }
+
+  Future<void> clearRecentSearches() async {
+    _recentSearches.clear();
+    notifyListeners();
+    await _saveToDisk();
+  }
+
   // --- Settings ---
   Future<void> setAutoplay(bool enabled) async {
     _autoplay = enabled;
@@ -252,6 +339,7 @@ class StorageService extends ChangeNotifier {
     _history.clear();
     _playlists.clear();
     _downloads.clear();
+    _recentSearches.clear();
     notifyListeners();
     await _saveToDisk();
   }

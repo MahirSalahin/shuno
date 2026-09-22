@@ -4,6 +4,8 @@ import '../models/playlist.dart';
 import '../services/download_service.dart';
 import '../services/playback_controller.dart';
 import '../services/storage_service.dart';
+import '../widgets/add_songs_to_playlist_sheet.dart';
+import '../widgets/playback_bar.dart';
 import '../widgets/track_tile.dart';
 
 class PlaylistDetailScreen extends StatefulWidget {
@@ -25,8 +27,8 @@ class PlaylistDetailScreen extends StatefulWidget {
 }
 
 class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
-  void _rename() {
-    final controller = TextEditingController(text: widget.playlist.title);
+  void _rename(Playlist currentPlaylist) {
+    final controller = TextEditingController(text: currentPlaylist.title);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -46,10 +48,9 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
               final newTitle = controller.text.trim();
               if (newTitle.isNotEmpty) {
                 await widget.storage.renamePlaylist(
-                  widget.playlist.id,
+                  currentPlaylist.id,
                   newTitle,
                 );
-                setState(() {});
                 if (context.mounted) Navigator.of(context).pop();
               }
             },
@@ -60,12 +61,12 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     );
   }
 
-  void _delete() {
+  void _delete(Playlist currentPlaylist) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Playlist'),
-        content: Text('Are you sure you want to delete "${widget.playlist.title}"?'),
+        content: Text('Are you sure you want to delete "${currentPlaylist.title}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -76,7 +77,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
             onPressed: () async {
-              await widget.storage.deletePlaylist(widget.playlist.id);
+              await widget.storage.deletePlaylist(currentPlaylist.id);
               if (context.mounted) {
                 Navigator.of(context).pop(); // dismiss dialog
                 Navigator.of(context).pop(); // pop screen
@@ -89,151 +90,202 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     );
   }
 
+  void _openAddSongs(Playlist currentPlaylist) {
+    AddSongsToPlaylistSheet.show(
+      context,
+      playlist: currentPlaylist,
+      storage: widget.storage,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final items = widget.playlist.items;
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        widget.playback,
+        widget.storage,
+        ?widget.downloadService,
+      ]),
+      builder: (context, _) {
+        final theme = Theme.of(context);
+        final currentPlaylist = widget.storage.playlists.firstWhere(
+          (p) => p.id == widget.playlist.id,
+          orElse: () => widget.playlist,
+        );
+        final items = currentPlaylist.items;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.playlist.title),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined),
-            tooltip: 'Rename',
-            onPressed: _rename,
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Delete Playlist',
-            onPressed: _delete,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Header info
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    Icons.playlist_play,
-                    size: 44,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.playlist.title,
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${items.length} songs',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Action buttons: Play All / Shuffle
-          if (items.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Play All'),
-                      onPressed: () => widget.playback.playQueue(items),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.shuffle),
-                      label: const Text('Shuffle'),
-                      onPressed: () {
-                        final shuffled = List.of(items)..shuffle();
-                        widget.playback.playQueue(shuffled);
-                      },
-                    ),
-                  ),
-                ],
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(currentPlaylist.title),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.playlist_add),
+                tooltip: 'Add Songs',
+                onPressed: () => _openAddSongs(currentPlaylist),
               ),
-            ),
-          const SizedBox(height: 12),
-          // List of tracks
-          Expanded(
-            child: items.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.music_off,
-                          size: 48,
-                          color: theme.colorScheme.outline,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'No songs in this playlist',
-                          style: theme.textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Add songs from search results or your favorites',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 100),
-                    itemCount: items.length,
-                    itemBuilder: (context, index) {
-                      final item = items[index];
-                      return TrackTile(
-                        item: item,
-                        playback: widget.playback,
-                        storage: widget.storage,
-                        downloadService: widget.downloadService,
-                        trailingAction: Icons.remove_circle_outline,
-                        trailingActionTooltip: 'Remove from playlist',
-                        onTrailingAction: () async {
-                          await widget.storage.removeTrackFromPlaylist(
-                            widget.playlist.id,
-                            item.id,
-                          );
-                          setState(() {});
-                        },
-                      );
-                    },
-                  ),
+              IconButton(
+                icon: const Icon(Icons.edit_outlined),
+                tooltip: 'Rename',
+                onPressed: () => _rename(currentPlaylist),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Delete Playlist',
+                onPressed: () => _delete(currentPlaylist),
+              ),
+            ],
           ),
-        ],
-      ),
+          bottomNavigationBar: widget.playback.selected != null
+              ? SafeArea(
+                  child: PlaybackBar(
+                    controller: widget.playback,
+                    storageService: widget.storage,
+                    downloadService: widget.downloadService,
+                  ),
+                )
+              : null,
+          body: Column(
+            children: [
+              // Header info
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.playlist_play,
+                        size: 44,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            currentPlaylist.title,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${items.length} songs',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Action buttons: Play All / Shuffle / Add Songs
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    if (items.isNotEmpty) ...[
+                      Expanded(
+                        child: FilledButton.icon(
+                          icon: const Icon(Icons.play_arrow),
+                          label: const Text('Play All'),
+                          onPressed: () => widget.playback.playQueue(items),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.shuffle),
+                          label: const Text('Shuffle'),
+                          onPressed: () {
+                            final shuffled = List.of(items)..shuffle();
+                            widget.playback.playQueue(shuffled);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    IconButton.filledTonal(
+                      icon: const Icon(Icons.add),
+                      tooltip: 'Add Songs to Playlist',
+                      onPressed: () => _openAddSongs(currentPlaylist),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // List of tracks
+              Expanded(
+                child: items.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.music_off,
+                              size: 48,
+                              color: theme.colorScheme.outline,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No songs in this playlist',
+                              style: theme.textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Add songs from downloads, favorites, or history',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            FilledButton.icon(
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add Songs'),
+                              onPressed: () => _openAddSongs(currentPlaylist),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 100),
+                        itemCount: items.length,
+                        itemBuilder: (context, index) {
+                          final item = items[index];
+                          return TrackTile(
+                            item: item,
+                            playback: widget.playback,
+                            storage: widget.storage,
+                            downloadService: widget.downloadService,
+                            trailingAction: Icons.remove_circle_outline,
+                            trailingActionTooltip: 'Remove from playlist',
+                            onTrailingAction: () async {
+                              await widget.storage.removeTrackFromPlaylist(
+                                currentPlaylist.id,
+                                item.id,
+                              );
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
