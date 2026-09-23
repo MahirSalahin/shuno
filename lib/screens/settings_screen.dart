@@ -183,8 +183,9 @@ class SettingsScreen extends StatelessWidget {
                                   ),
                                   onPressed: () async {
                                     await downloadService?.clearAllDownloads();
-                                    if (context.mounted)
+                                    if (context.mounted) {
                                       Navigator.of(context).pop();
+                                    }
                                   },
                                   child: const Text('Delete All'),
                                 ),
