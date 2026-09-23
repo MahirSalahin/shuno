@@ -72,11 +72,6 @@ class YoutubeService {
     }
   }
 
-  Future<List<Uri>> resolveAudioUrls(String videoId, {bool highQuality = true}) async {
-    final single = await resolveAudioUrl(videoId, highQuality: highQuality);
-    return [single];
-  }
-
   Future<List<YoutubeSearchItem>> search(String query) async {
     final trimmedQuery = query.trim();
     if (trimmedQuery.isEmpty) return [];
@@ -159,61 +154,11 @@ class YoutubeService {
     String channelId, {
     String? channelName,
   }) async {
-    try {
-      final page = await _scrapeChannelVideosPage(
-        channelId,
-        channelName: channelName,
-      );
-      if (page.items.isNotEmpty) return page.items;
-    } catch (_) {}
-
-    final youtube = YoutubeExplode();
-    try {
-      final pageUploads = await youtube.channels
-          .getUploadsFromPage(channelId)
-          .timeout(const Duration(seconds: 15));
-
-      final videos = pageUploads
-          .where((v) => v.title.isNotEmpty)
-          .map(
-            (v) => YoutubeSearchItem(
-              id: v.id.value,
-              title: v.title,
-              channelName: v.author.isNotEmpty ? v.author : (channelName ?? ''),
-              thumbnailUrl: v.thumbnails.mediumResUrl,
-              duration: (v.duration != null && v.duration! > Duration.zero)
-                  ? v.duration
-                  : null,
-            ),
-          )
-          .toList();
-
-      if (videos.isNotEmpty) return videos;
-
-      // Fallback: dedicated uploads stream for this channel
-      final uploadsStream = youtube.channels.getUploads(channelId).take(30);
-      final streamVideos = <YoutubeSearchItem>[];
-      await for (final v in uploadsStream) {
-        streamVideos.add(
-          YoutubeSearchItem(
-            id: v.id.value,
-            title: v.title.isNotEmpty
-                ? v.title
-                : (channelName != null ? '$channelName Track' : 'Track'),
-            channelName: v.author.isNotEmpty ? v.author : (channelName ?? ''),
-            thumbnailUrl: v.thumbnails.mediumResUrl,
-            duration: (v.duration != null && v.duration! > Duration.zero)
-                ? v.duration
-                : null,
-          ),
-        );
-      }
-      return streamVideos;
-    } catch (_) {
-      return [];
-    } finally {
-      youtube.close();
-    }
+    final page = await getChannelUploadsPage(
+      channelId,
+      channelName: channelName,
+    );
+    return page.items;
   }
 
   Future<ChannelUploadsPage> getChannelUploadsPage(

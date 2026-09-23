@@ -4,6 +4,7 @@ import '../services/download_service.dart';
 import '../services/playback_controller.dart';
 import '../services/storage_service.dart';
 import '../widgets/confirm_dialog.dart';
+import '../widgets/full_player_sheet.dart';
 import '../widgets/track_tile.dart';
 
 class QueueScreen extends StatelessWidget {
@@ -122,15 +123,66 @@ class QueueScreen extends StatelessWidget {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        if (playback.loopMode != PlaybackLoopMode.off)
-                          Text(
-                            playback.loopMode == PlaybackLoopMode.one
-                                ? 'Repeat One'
-                                : 'Repeat All',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.primary,
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            InkWell(
+                              borderRadius: BorderRadius.circular(6),
+                              onTap: () => showSpeedPickerSheet(context, playback),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: playback.playbackSpeed != 1.0
+                                        ? theme.colorScheme.primary
+                                        : theme.colorScheme.outlineVariant.withAlpha(120),
+                                    width: 1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(6),
+                                  color: playback.playbackSpeed != 1.0
+                                      ? theme.colorScheme.primary.withAlpha(30)
+                                      : Colors.transparent,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.speed,
+                                      size: 13,
+                                      color: playback.playbackSpeed != 1.0
+                                          ? theme.colorScheme.primary
+                                          : theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      playback.playbackSpeed == 1.0
+                                          ? '1x'
+                                          : '${playback.playbackSpeed}x',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: playback.playbackSpeed != 1.0
+                                            ? theme.colorScheme.primary
+                                            : theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
+                            if (playback.loopMode != PlaybackLoopMode.off) ...[
+                              const SizedBox(width: 8),
+                              Text(
+                                playback.loopMode == PlaybackLoopMode.one
+                                    ? 'Repeat One'
+                                    : 'Repeat All',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ],
                     ),
                   ),

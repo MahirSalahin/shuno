@@ -20,12 +20,14 @@ class PlaybackController extends ChangeNotifier {
   }) : _youtubeService = youtubeService,
        _storageService = storageService,
        _player = player,
-       _pauseOnBackground = pauseOnBackground;
+       _pauseOnBackground = pauseOnBackground,
+       _playbackSpeed = storageService?.playbackSpeed ?? 1.0;
 
   final YoutubeService _youtubeService;
   final StorageService? _storageService;
   final bool _pauseOnBackground;
   AudioPlayer? _player;
+  double _playbackSpeed;
 
   StreamSubscription<PlayerState>? _stateSubscription;
   StreamSubscription<PlayerException>? _errorSubscription;
@@ -131,6 +133,18 @@ class PlaybackController extends ChangeNotifier {
     notifyListeners();
   }
 
+  double get playbackSpeed => _playbackSpeed;
+
+  Future<void> setPlaybackSpeed(double speed) async {
+    if (speed <= 0 || _playbackSpeed == speed) return;
+    _playbackSpeed = speed;
+    if (_player != null) {
+      await _player!.setSpeed(speed);
+    }
+    await _storageService?.setPlaybackSpeed(speed);
+    notifyListeners();
+  }
+
   void _saveOfflinePositionIfNeeded(Duration pos, {bool force = false}) {
     final sel = _selected;
     if (sel == null || _storageService == null) return;
@@ -145,6 +159,9 @@ class PlaybackController extends ChangeNotifier {
 
   AudioPlayer _preparePlayer() {
     final player = _player ??= AudioPlayer();
+    if (_playbackSpeed != 1.0) {
+      player.setSpeed(_playbackSpeed);
+    }
     _stateSubscription ??= player.playerStateStream.listen((state) {
       if (_disposed) return;
       if (state.processingState == ProcessingState.completed) {
@@ -373,6 +390,9 @@ class PlaybackController extends ChangeNotifier {
         ).timeout(
           const Duration(seconds: 20),
         );
+      }
+      if (_playbackSpeed != 1.0) {
+        await player.setSpeed(_playbackSpeed);
       }
 
       if (_disposed || request != _request) return;

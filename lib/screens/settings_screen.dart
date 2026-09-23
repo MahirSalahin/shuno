@@ -25,132 +25,183 @@ class SettingsScreen extends StatelessWidget {
     final totalMB = (totalBytes / (1024 * 1024)).toStringAsFixed(1);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        children: [
-          // Section: Appearance & Theme
-          _buildSectionHeader(context, 'APPEARANCE & THEME'),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: AppPalette.values.map((palette) {
-                final isSelected = storage.themeKey == palette.id;
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: () => storage.setThemeKey(palette.id),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? palette.primary.withAlpha(28)
-                              : theme.colorScheme.surfaceContainerLow,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
+      appBar: AppBar(
+        title: Text(
+          'Settings',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+      body: ListTileTheme(
+        data: ListTileThemeData(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+          titleTextStyle: theme.textTheme.titleMedium?.copyWith(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface,
+          ),
+          subtitleTextStyle: theme.textTheme.bodyMedium?.copyWith(
+            fontSize: 11.5,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        child: ListView(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          children: [
+            // Section: Appearance & Theme
+            _buildSectionHeader(context, 'APPEARANCE & THEME'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: AppPalette.values.map((palette) {
+                  final isSelected = storage.themeKey == palette.id;
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () => storage.setThemeKey(palette.id),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
                             color: isSelected
-                                ? palette.primary
-                                : theme.colorScheme.outlineVariant.withAlpha(
-                                    80,
-                                  ),
-                            width: isSelected ? 2 : 1,
+                                ? palette.primary.withAlpha(28)
+                                : theme.colorScheme.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isSelected
+                                  ? palette.primary
+                                  : theme.colorScheme.outlineVariant.withAlpha(
+                                      80,
+                                    ),
+                              width: isSelected ? 2 : 1,
+                            ),
+                            boxShadow: isSelected
+                                ? [
+                                    BoxShadow(
+                                      color: palette.primary.withAlpha(60),
+                                      blurRadius: 10,
+                                    ),
+                                  ]
+                                : null,
                           ),
-                          boxShadow: isSelected
-                              ? [
-                                  BoxShadow(
-                                    color: palette.primary.withAlpha(60),
-                                    blurRadius: 10,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  color: palette.primary,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white.withAlpha(180),
+                                    width: 1.5,
                                   ),
-                                ]
-                              : null,
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 28,
-                              height: 28,
-                              decoration: BoxDecoration(
-                                color: palette.primary,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white.withAlpha(180),
-                                  width: 1.5,
+                                ),
+                                child: isSelected
+                                    ? const Icon(
+                                        Icons.check,
+                                        size: 14,
+                                        color: Colors.black,
+                                      )
+                                    : null,
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                palette.name.split(' ').last,
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.w500,
+                                  color: isSelected
+                                      ? palette.primary
+                                      : theme.colorScheme.onSurfaceVariant,
                                 ),
                               ),
-                              child: isSelected
-                                  ? const Icon(
-                                      Icons.check,
-                                      size: 16,
-                                      color: Colors.black,
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              palette.name.split(' ').last,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.w500,
-                                color: isSelected
-                                    ? palette.primary
-                                    : theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              }).toList(),
+                  );
+                }).toList(),
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
-          // Section: Playback
-          _buildSectionHeader(context, 'PLAYBACK'),
-          _buildGroupedCard(
-            context,
-            children: [
-              SwitchListTile(
-                secondary: _buildIconBox(context, Icons.autorenew),
-                title: const Text('Autoplay'),
-                subtitle: const Text('Play similar songs when queue ends'),
-                value: storage.autoplay,
-                onChanged: (val) => storage.setAutoplay(val),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: _buildIconBox(context, Icons.high_quality),
-                title: const Text('Audio Quality'),
-                subtitle: Text(
-                  storage.audioQuality == 'high' ? 'High' : 'Data Saver',
+            // Section: Playback
+            _buildSectionHeader(context, 'PLAYBACK'),
+            _buildGroupedCard(
+              context,
+              children: [
+                SwitchListTile(
+                  secondary: _buildIconBox(context, Icons.autorenew),
+                  title: const Text('Autoplay'),
+                  subtitle: const Text('Play similar songs when queue ends'),
+                  value: storage.autoplay,
+                  onChanged: (val) => storage.setAutoplay(val),
                 ),
-                trailing: DropdownButton<String>(
-                  value: storage.audioQuality,
-                  underline: const SizedBox.shrink(),
-                  dropdownColor: theme.colorScheme.surfaceContainerHigh,
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'high',
-                      child: Text('High Quality'),
-                    ),
-                    DropdownMenuItem(value: 'saver', child: Text('Data Saver')),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) storage.setAudioQuality(val);
-                  },
+                const Divider(height: 1),
+                ListTile(
+                  leading: _buildIconBox(context, Icons.speed),
+                  title: const Text('Playback Speed'),
+                  subtitle: Text(
+                    storage.playbackSpeed == 1.0
+                        ? '1.0x (Normal)'
+                        : '${storage.playbackSpeed}x',
+                  ),
+                  trailing: DropdownButton<double>(
+                    value: storage.playbackSpeed,
+                    underline: const SizedBox.shrink(),
+                    dropdownColor: theme.colorScheme.surfaceContainerHigh,
+                    style: theme.textTheme.bodyMedium?.copyWith(fontSize: 13),
+                    items: const [
+                      DropdownMenuItem(value: 0.5, child: Text('0.5x')),
+                      DropdownMenuItem(value: 0.75, child: Text('0.75x')),
+                      DropdownMenuItem(value: 1.0, child: Text('1.0x Normal')),
+                      DropdownMenuItem(value: 1.25, child: Text('1.25x')),
+                      DropdownMenuItem(value: 1.5, child: Text('1.5x')),
+                      DropdownMenuItem(value: 1.75, child: Text('1.75x')),
+                      DropdownMenuItem(value: 2.0, child: Text('2.0x')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) storage.setPlaybackSpeed(val);
+                    },
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+                const Divider(height: 1),
+                ListTile(
+                  leading: _buildIconBox(context, Icons.high_quality),
+                  title: const Text('Audio Quality'),
+                  subtitle: Text(
+                    storage.audioQuality == 'high' ? 'High' : 'Data Saver',
+                  ),
+                  trailing: DropdownButton<String>(
+                    value: storage.audioQuality,
+                    underline: const SizedBox.shrink(),
+                    dropdownColor: theme.colorScheme.surfaceContainerHigh,
+                    style: theme.textTheme.bodyMedium?.copyWith(fontSize: 13),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'high',
+                        child: Text('High Quality'),
+                      ),
+                      DropdownMenuItem(value: 'saver', child: Text('Data Saver')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) storage.setAudioQuality(val);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
 
           // Section: Storage & Data
           _buildSectionHeader(context, 'STORAGE & DATA'),
@@ -165,6 +216,10 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 trailing: storage.downloads.isNotEmpty
                     ? TextButton(
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          textStyle: const TextStyle(fontSize: 12.5),
+                        ),
                         onPressed: () async {
                           final confirm = await showConfirmDialog(
                             context,
@@ -188,6 +243,10 @@ class SettingsScreen extends StatelessWidget {
                 subtitle: Text('${storage.history.length} played tracks'),
                 trailing: storage.history.isNotEmpty
                     ? TextButton(
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          textStyle: const TextStyle(fontSize: 12.5),
+                        ),
                         onPressed: () async {
                           final confirm = await showConfirmDialog(
                             context,
@@ -237,7 +296,7 @@ class SettingsScreen extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
 
           // Section: About
           _buildSectionHeader(context, 'ABOUT'),
@@ -251,29 +310,31 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 subtitle: const Text('YouTube Audio Client • v0.1.0'),
                 leading: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                   child: Image.asset(
                     'assets/shuno.png',
-                    width: 38,
-                    height: 38,
+                    width: 32,
+                    height: 32,
                     fit: BoxFit.cover,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 32),
         ],
+      ),
       ),
     );
   }
 
   Widget _buildSectionHeader(BuildContext context, String title) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 6),
       child: Text(
         title,
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+        style: TextStyle(
+          fontSize: 11,
           letterSpacing: 1.2,
           color: Theme.of(context).colorScheme.primary,
           fontWeight: FontWeight.bold,
@@ -305,13 +366,13 @@ class SettingsScreen extends StatelessWidget {
     final theme = Theme.of(context);
     final effectiveColor = color ?? theme.colorScheme.primary;
     return Container(
-      width: 36,
-      height: 36,
+      width: 32,
+      height: 32,
       decoration: BoxDecoration(
         color: effectiveColor.withAlpha(26),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: Icon(icon, color: effectiveColor, size: 20),
+      child: Icon(icon, color: effectiveColor, size: 18),
     );
   }
 }

@@ -20,6 +20,7 @@ class StorageService extends ChangeNotifier {
   bool _autoplay = true;
   String _audioQuality = 'high'; // 'high' or 'saver'
   String _themeKey = 'emerald'; // 'emerald', 'cyan', 'amethyst', 'amber'
+  double _playbackSpeed = 1.0;
 
   List<YoutubeSearchItem> get favorites => List.unmodifiable(_favorites);
   List<YoutubeSearchItem> get history => List.unmodifiable(_history);
@@ -29,6 +30,7 @@ class StorageService extends ChangeNotifier {
   bool get autoplay => _autoplay;
   String get audioQuality => _audioQuality;
   String get themeKey => _themeKey;
+  double get playbackSpeed => _playbackSpeed;
   bool get isInitialized => _initialized;
 
   Future<void> init({File? overrideFile}) async {
@@ -108,6 +110,9 @@ class StorageService extends ChangeNotifier {
       if (data['themeKey'] is String) {
         _themeKey = data['themeKey'] as String;
       }
+      if (data['playbackSpeed'] is num) {
+        _playbackSpeed = (data['playbackSpeed'] as num).toDouble();
+      }
     } catch (e) {
       if (kDebugMode) debugPrint('Error loading storage: $e');
     }
@@ -127,6 +132,7 @@ class StorageService extends ChangeNotifier {
         'autoplay': _autoplay,
         'audioQuality': _audioQuality,
         'themeKey': _themeKey,
+        'playbackSpeed': _playbackSpeed,
       };
       await file.writeAsString(jsonEncode(data), flush: true);
     } catch (e) {
@@ -370,12 +376,20 @@ class StorageService extends ChangeNotifier {
     await _saveToDisk();
   }
 
+  Future<void> setPlaybackSpeed(double speed) async {
+    if (speed <= 0 || _playbackSpeed == speed) return;
+    _playbackSpeed = speed;
+    notifyListeners();
+    await _saveToDisk();
+  }
+
   Future<void> clearAllData() async {
     _favorites.clear();
     _history.clear();
     _playlists.clear();
     _downloads.clear();
     _recentSearches.clear();
+    _playbackSpeed = 1.0;
     notifyListeners();
     await _saveToDisk();
   }

@@ -114,29 +114,10 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
     });
 
     try {
-      ChannelUploadsPage pageResult;
-      try {
-        pageResult = await widget.youtubeService.getChannelUploadsPage(
-          _channel.id,
-          channelName: _channel.title,
-        );
-      } catch (_) {
-        final videos = await widget.youtubeService.getChannelVideos(
-          _channel.id,
-          channelName: _channel.title,
-        );
-        pageResult = ChannelUploadsPage(items: videos, hasMore: false);
-      }
-
-      if (pageResult.items.isEmpty) {
-        final videos = await widget.youtubeService.getChannelVideos(
-          _channel.id,
-          channelName: _channel.title,
-        );
-        if (videos.isNotEmpty) {
-          pageResult = ChannelUploadsPage(items: videos, hasMore: false);
-        }
-      }
+      final pageResult = await widget.youtubeService.getChannelUploadsPage(
+        _channel.id,
+        channelName: _channel.title,
+      );
 
       final detailsFuture = _channel.subscriberCount == null
           ? widget.youtubeService.getChannel(_channel.id)

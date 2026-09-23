@@ -262,6 +262,36 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Playback Speed Button Badge
+                    IconButton(
+                      icon: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: playback.playbackSpeed != 1.0
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.outlineVariant,
+                            width: 1.2,
+                          ),
+                          borderRadius: BorderRadius.circular(6),
+                          color: playback.playbackSpeed != 1.0
+                              ? theme.colorScheme.primary.withAlpha(35)
+                              : Colors.transparent,
+                        ),
+                        child: Text(
+                          playback.playbackSpeed == 1.0 ? '1x' : '${playback.playbackSpeed}x',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: playback.playbackSpeed != 1.0
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      tooltip: 'Playback speed: ${playback.playbackSpeed}x',
+                      onPressed: () => showSpeedPickerSheet(context, playback),
+                    ),
                     // Sleep Timer Header Icon
                     IconButton(
                       icon: Icon(
@@ -587,27 +617,51 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
             ),
             const SizedBox(height: 12),
 
-            // Active Sleep Timer indicator
-            if (playback.hasSleepTimer)
+            // Active Speed or Sleep Timer indicators
+            if (playback.hasSleepTimer || playback.playbackSpeed != 1.0)
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
-                child: Center(
-                  child: ActionChip(
-                    avatar: Icon(
-                      Icons.bedtime,
-                      size: 15,
-                      color: theme.colorScheme.primary,
-                    ),
-                    label: Text(
-                      'Sleep: ${playback.sleepTimerRemainingFormatted}',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.w600,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (playback.playbackSpeed != 1.0) ...[
+                      ActionChip(
+                        avatar: Icon(
+                          Icons.speed,
+                          size: 15,
+                          color: theme.colorScheme.primary,
+                        ),
+                        label: Text(
+                          'Speed: ${playback.playbackSpeed}x',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => showSpeedPickerSheet(context, playback),
                       ),
-                    ),
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () => _showSleepTimerPicker(context),
-                  ),
+                      if (playback.hasSleepTimer) const SizedBox(width: 8),
+                    ],
+                    if (playback.hasSleepTimer)
+                      ActionChip(
+                        avatar: Icon(
+                          Icons.bedtime,
+                          size: 15,
+                          color: theme.colorScheme.primary,
+                        ),
+                        label: Text(
+                          'Sleep: ${playback.sleepTimerRemainingFormatted}',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _showSleepTimerPicker(context),
+                      ),
+                  ],
                 ),
               ),
 
@@ -707,4 +761,76 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
     ),
     );
   }
+}
+
+void showSpeedPickerSheet(BuildContext context, PlaybackController playback) {
+  final theme = Theme.of(context);
+  final currentSpeed = playback.playbackSpeed;
+  const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: theme.colorScheme.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (ctx) => SafeArea(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'PLAYBACK SPEED',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      letterSpacing: 1.2,
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      playback.setPlaybackSpeed(1.0);
+                      Navigator.of(ctx).pop();
+                    },
+                    child: const Text('Reset (1.0x)'),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            for (final s in speeds)
+              ListTile(
+                dense: true,
+                leading: Icon(
+                  Icons.speed,
+                  color: s == currentSpeed ? theme.colorScheme.primary : null,
+                  size: 20,
+                ),
+                title: Text(
+                  s == 1.0 ? '1.0x (Normal)' : '${s}x',
+                  style: TextStyle(
+                    fontWeight: s == currentSpeed ? FontWeight.bold : FontWeight.normal,
+                    color: s == currentSpeed ? theme.colorScheme.primary : null,
+                  ),
+                ),
+                trailing: s == currentSpeed
+                    ? Icon(Icons.check, color: theme.colorScheme.primary, size: 20)
+                    : null,
+                onTap: () {
+                  playback.setPlaybackSpeed(s);
+                  Navigator.of(ctx).pop();
+                },
+              ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    ),
+  );
 }

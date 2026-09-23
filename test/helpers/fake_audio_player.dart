@@ -16,6 +16,8 @@ class FakeAudioPlayer implements AudioPlayer {
   Completer<Duration?>? pendingLoad;
   int stopCount = 0;
   Duration? lastInitialPosition;
+  @override
+  double speed = 1.0;
 
   @override
   bool playing = false;
@@ -93,6 +95,11 @@ class FakeAudioPlayer implements AudioPlayer {
   Future<void> seek(Duration? position, {int? index}) async {
     seeks.add(position);
     emit(ProcessingState.ready);
+  }
+
+  @override
+  Future<void> setSpeed(double speed) async {
+    this.speed = speed;
   }
 
   @override
