@@ -18,6 +18,18 @@ class ChannelUploadsPage {
   final dynamic continuation;
 }
 
+class ChannelPlaylistsPage {
+  const ChannelPlaylistsPage({
+    required this.items,
+    this.hasMore = false,
+    this.continuation,
+  });
+
+  final List<YoutubePlaylistItem> items;
+  final bool hasMore;
+  final String? continuation;
+}
+
 class YoutubeService {
   YoutubeExplode? _client;
   YoutubeExplode get _yt => _client ??= YoutubeExplode();
@@ -291,14 +303,43 @@ class YoutubeService {
     }
   }
 
-  Future<List<YoutubePlaylistItem>> getChannelPlaylists(
+  Future<ChannelPlaylistsPage> getChannelPlaylistsPage(
     String channelName, {
     String? channelId,
+    String? continuation,
   }) async {
     final id = channelId?.trim() ?? '';
-    if (id.isEmpty) return [];
+    if (id.isEmpty) return const ChannelPlaylistsPage(items: []);
 
     try {
+      if (continuation != null && continuation.isNotEmpty) {
+        final postRes = await http.post(
+          Uri.parse('https://www.youtube.com/youtubei/v1/browse?prettyPrint=false'),
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+          body: jsonEncode({
+            'context': {
+              'client': {
+                'clientName': 'WEB',
+                'clientVersion': '2.20231201.00.00',
+                'hl': 'en',
+              },
+            },
+            'continuation': continuation,
+          }),
+        ).timeout(const Duration(seconds: 15));
+
+        if (postRes.statusCode != 200) {
+          return const ChannelPlaylistsPage(items: []);
+        }
+        final data = jsonDecode(postRes.body);
+        return _extractChannelPlaylistsPageFromJson(data, channelName);
+      }
+
       final playlistsUrl = 'https://www.youtube.com/channel/$id/playlists?hl=en';
       final response = await http.get(
         Uri.parse(playlistsUrl),
@@ -309,27 +350,43 @@ class YoutubeService {
         },
       ).timeout(const Duration(seconds: 15));
 
-      if (response.statusCode != 200) return [];
+      if (response.statusCode != 200) {
+        return const ChannelPlaylistsPage(items: []);
+      }
 
       final match = RegExp(
         r'var ytInitialData = (\{.+?\});<\/script>',
         dotAll: true,
       ).firstMatch(response.body);
-      if (match == null) return [];
+      if (match == null) {
+        return const ChannelPlaylistsPage(items: []);
+      }
 
       final data = jsonDecode(match.group(1)!);
-      return _extractChannelPlaylistsFromJson(data, channelName);
+      return _extractChannelPlaylistsPageFromJson(data, channelName);
     } catch (_) {
-      return [];
+      return const ChannelPlaylistsPage(items: []);
     }
   }
 
-  List<YoutubePlaylistItem> _extractChannelPlaylistsFromJson(
+  Future<List<YoutubePlaylistItem>> getChannelPlaylists(
+    String channelName, {
+    String? channelId,
+  }) async {
+    final page = await getChannelPlaylistsPage(
+      channelName,
+      channelId: channelId,
+    );
+    return page.items;
+  }
+
+  ChannelPlaylistsPage _extractChannelPlaylistsPageFromJson(
     dynamic node,
     String defaultAuthor,
   ) {
     final results = <YoutubePlaylistItem>[];
     final seenIds = <String>{};
+    String? nextContinuation;
 
     void walk(dynamic obj) {
       if (obj is Map<String, dynamic>) {
@@ -418,6 +475,13 @@ class YoutubeService {
               ),
             );
           }
+        } else if (obj.containsKey('continuationItemRenderer')) {
+          final cir = obj['continuationItemRenderer'] as Map<String, dynamic>;
+          final endpoint = cir['continuationEndpoint'];
+          final token = endpoint?['continuationCommand']?['token']?.toString();
+          if (token != null && token.isNotEmpty) {
+            nextContinuation ??= token;
+          }
         }
 
         for (final v in obj.values) {
@@ -431,16 +495,27 @@ class YoutubeService {
     }
 
     walk(node);
-    return results;
+    return ChannelPlaylistsPage(
+      items: results,
+      hasMore: nextContinuation != null && results.isNotEmpty,
+      continuation: nextContinuation,
+    );
   }
 
   Future<List<YoutubeSearchItem>> getPlaylistTracks(
     String playlistId, {
     int limit = 50,
   }) async {
-    if (playlistId.trim().isEmpty) return [];
+    final trimmedId = playlistId.trim();
+    if (trimmedId.isEmpty) return [];
+
     try {
-      final videoStream = _yt.playlists.getVideos(playlistId).take(limit);
+      final scraped = await _scrapePlaylistTracks(trimmedId, limit: limit);
+      if (scraped.isNotEmpty) return scraped;
+    } catch (_) {}
+
+    try {
+      final videoStream = _yt.playlists.getVideos(trimmedId).take(limit);
       final items = <YoutubeSearchItem>[];
       await for (final video in videoStream) {
         items.add(
@@ -459,6 +534,156 @@ class YoutubeService {
     } catch (_) {
       return [];
     }
+  }
+
+  Future<List<YoutubeSearchItem>> _scrapePlaylistTracks(
+    String playlistId, {
+    int limit = 50,
+  }) async {
+    final url = 'https://www.youtube.com/playlist?list=$playlistId&hl=en';
+    final res = await http.get(
+      Uri.parse(url),
+      headers: {
+        'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    ).timeout(const Duration(seconds: 15));
+
+    if (res.statusCode != 200) return [];
+
+    final match = RegExp(
+      r'var ytInitialData = (\{.+?\});<\/script>',
+      dotAll: true,
+    ).firstMatch(res.body);
+    if (match == null) return [];
+
+    final data = jsonDecode(match.group(1)!);
+    return _extractPlaylistVideosFromJson(data, limit: limit);
+  }
+
+  List<YoutubeSearchItem> _extractPlaylistVideosFromJson(
+    dynamic node, {
+    int limit = 50,
+  }) {
+    final results = <YoutubeSearchItem>[];
+    final seenIds = <String>{};
+
+    void walk(dynamic obj) {
+      if (results.length >= limit) return;
+      if (obj is Map<String, dynamic>) {
+        if (obj.containsKey('playlistVideoRenderer')) {
+          final pvr = obj['playlistVideoRenderer'] as Map<String, dynamic>;
+          final videoId = pvr['videoId']?.toString() ?? '';
+          if (videoId.isNotEmpty && seenIds.add(videoId)) {
+            final titleObj = pvr['title'];
+            var title = 'Track';
+            if (titleObj is Map<String, dynamic>) {
+              if (titleObj['runs'] is List && (titleObj['runs'] as List).isNotEmpty) {
+                title = titleObj['runs'][0]['text']?.toString() ?? 'Track';
+              } else if (titleObj['simpleText'] != null) {
+                title = titleObj['simpleText'].toString();
+              }
+            }
+
+            var author = '';
+            final byline = pvr['shortBylineText'] ?? pvr['longBylineText'];
+            if (byline is Map<String, dynamic> &&
+                byline['runs'] is List &&
+                (byline['runs'] as List).isNotEmpty) {
+              author = byline['runs'][0]['text']?.toString() ?? '';
+            }
+
+            final durationText = pvr['lengthText']?['simpleText']?.toString() ?? '';
+            final duration = _parseDuration(durationText);
+
+            var thumb = ThumbnailSet(videoId).mediumResUrl;
+            final thumbs = pvr['thumbnail']?['thumbnails'];
+            if (thumbs is List && thumbs.isNotEmpty) {
+              thumb = thumbs.last['url']?.toString() ?? thumb;
+            }
+
+            results.add(
+              YoutubeSearchItem(
+                id: videoId,
+                title: title,
+                channelName: author,
+                thumbnailUrl: thumb,
+                duration: duration,
+              ),
+            );
+          }
+        } else if (obj.containsKey('lockupViewModel')) {
+          final lvm = obj['lockupViewModel'] as Map<String, dynamic>;
+          final contentType = lvm['contentType']?.toString() ?? '';
+          final contentId = lvm['contentId']?.toString() ?? '';
+          if (contentType == 'LOCKUP_CONTENT_TYPE_VIDEO' &&
+              contentId.isNotEmpty &&
+              seenIds.add(contentId)) {
+            final titleMeta = lvm['metadata']?['lockupMetadataViewModel']?['title'];
+            final title = titleMeta?['content']?.toString() ?? 'Track';
+
+            var author = '';
+            final rows = lvm['metadata']?['lockupMetadataViewModel']?['metadata']
+                ?['contentMetadataViewModel']?['metadataRows'];
+            if (rows is List && rows.isNotEmpty) {
+              final parts = rows[0]?['metadataParts'];
+              if (parts is List && parts.isNotEmpty) {
+                author = parts[0]?['text']?['content']?.toString() ?? '';
+              }
+            }
+
+            Duration? duration;
+            final overlays = lvm['contentImage']?['thumbnailViewModel']?['overlays'];
+            if (overlays is List) {
+              for (final ov in overlays) {
+                final badges = ov['thumbnailBottomOverlayViewModel']?['badges'] ??
+                    ov['thumbnailOverlayBadgeViewModel']?['thumbnailBadges'];
+                if (badges is List) {
+                  for (final b in badges) {
+                    final text = b['thumbnailBadgeViewModel']?['text']?.toString() ?? '';
+                    if (text.contains(':')) {
+                      duration = _parseDuration(text);
+                      break;
+                    }
+                  }
+                }
+                if (duration != null) break;
+              }
+            }
+
+            var thumb = ThumbnailSet(contentId).mediumResUrl;
+            final sources = lvm['contentImage']?['thumbnailViewModel']?['image']?['sources'];
+            if (sources is List && sources.isNotEmpty) {
+              thumb = sources.last['url']?.toString() ?? thumb;
+            }
+
+            results.add(
+              YoutubeSearchItem(
+                id: contentId,
+                title: title,
+                channelName: author,
+                thumbnailUrl: thumb,
+                duration: duration,
+              ),
+            );
+          }
+        }
+
+        for (final v in obj.values) {
+          if (results.length >= limit) return;
+          walk(v);
+        }
+      } else if (obj is List) {
+        for (final item in obj) {
+          if (results.length >= limit) return;
+          walk(item);
+        }
+      }
+    }
+
+    walk(node);
+    return results;
   }
 
   Future<List<YoutubeSearchItem>> searchChannelTracks(

@@ -60,6 +60,20 @@ class FakeYoutubeService extends YoutubeService {
         continuation: hasMoreUploads ? 'next' : null,
       );
 
+  bool hasMorePlaylists = false;
+
+  @override
+  Future<ChannelPlaylistsPage> getChannelPlaylistsPage(
+    String channelName, {
+    String? channelId,
+    String? continuation,
+  }) async =>
+      ChannelPlaylistsPage(
+        items: channelPlaylistsToReturn,
+        hasMore: hasMorePlaylists,
+        continuation: hasMorePlaylists ? 'next_pl' : null,
+      );
+
   @override
   Future<List<YoutubePlaylistItem>> getChannelPlaylists(
     String channelName, {
@@ -479,10 +493,10 @@ void main() {
     await tester.pumpAndSettle();
 
     // Check Playlists tab chip is visible
-    expect(find.text('Playlists (1)'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Playlists'), findsOneWidget);
 
     // Switch to Playlists tab
-    await tester.tap(find.text('Playlists (1)'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Playlists'));
     await tester.pumpAndSettle();
 
     // Verify playlist card
@@ -591,14 +605,14 @@ void main() {
     expect(find.text('Surah Al-Mulk'), findsOneWidget);
 
     // Switch to Playlists tab
-    await tester.tap(find.text('Playlists (1)'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Playlists'));
     await tester.pumpAndSettle();
 
     // Verify official playlist
     expect(find.text('Official Full Quran'), findsOneWidget);
 
     // Switch back to Tracks and search
-    await tester.tap(find.text('Tracks (1)'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Tracks'));
     await tester.pumpAndSettle();
 
     final searchField = find.widgetWithText(TextField, 'Search in Anas Lahebouk…');
@@ -607,6 +621,179 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Surah Rahman'), findsOneWidget);
+  });
+
+  testWidgets('channel playlists can be searched and filtered in channel view', (
+    tester,
+  ) async {
+    final service = FakeYoutubeService();
+    service.channelsToReturn = [
+      const YoutubeChannelItem(
+        id: 'c-1',
+        title: 'Coldplay',
+        thumbnailUrl: '',
+      ),
+    ];
+    service.channelPlaylistsToReturn = [
+      const YoutubePlaylistItem(
+        id: 'pl-1',
+        title: 'Parachutes Full Album',
+        thumbnailUrl: '',
+        videoCount: 10,
+        author: 'Coldplay',
+      ),
+      const YoutubePlaylistItem(
+        id: 'pl-2',
+        title: 'A Rush of Blood to the Head',
+        thumbnailUrl: '',
+        videoCount: 11,
+        author: 'Coldplay',
+      ),
+    ];
+
+    await openSearch(tester, service);
+    await submit(tester, 'coldplay');
+    service.response.complete([sample]);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Channels'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Coldplay'));
+    await tester.pumpAndSettle();
+
+    // Switch to Playlists tab
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Playlists'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Parachutes Full Album'), findsOneWidget);
+    expect(find.text('A Rush of Blood to the Head'), findsOneWidget);
+
+    // Search in playlists
+    final playlistSearchField = find.widgetWithText(
+      TextField,
+      'Search playlists in Coldplay…',
+    );
+    expect(playlistSearchField, findsOneWidget);
+
+    await tester.enterText(playlistSearchField, 'Parachutes');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Parachutes Full Album'), findsOneWidget);
+    expect(find.text('A Rush of Blood to the Head'), findsNothing);
+
+    // Tap Show All
+    await tester.tap(find.text('Show All'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Parachutes Full Album'), findsOneWidget);
+    expect(find.text('A Rush of Blood to the Head'), findsOneWidget);
+  });
+
+  testWidgets('channel exploration shows load more playlists button when hasMorePlaylists is true', (
+    tester,
+  ) async {
+    final service = FakeYoutubeService();
+    service.channelsToReturn = [
+      const YoutubeChannelItem(
+        id: 'c-1',
+        title: 'Coldplay',
+        thumbnailUrl: '',
+      ),
+    ];
+    service.hasMorePlaylists = true;
+    service.channelPlaylistsToReturn = [
+      const YoutubePlaylistItem(
+        id: 'pl-1',
+        title: 'Parachutes Full Album',
+        thumbnailUrl: '',
+        videoCount: 10,
+        author: 'Coldplay',
+      ),
+    ];
+
+    await openSearch(tester, service);
+    await submit(tester, 'coldplay');
+    service.response.complete([sample]);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Channels'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Coldplay'));
+    await tester.pumpAndSettle();
+
+    // Switch to Playlists tab
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Playlists'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Load More Playlists'), findsOneWidget);
+  });
+
+  testWidgets('tracks can be searched within YoutubePlaylistDetailScreen', (
+    tester,
+  ) async {
+    final service = FakeYoutubeService();
+    service.channelsToReturn = [
+      const YoutubeChannelItem(
+        id: 'c-1',
+        title: 'Coldplay',
+        thumbnailUrl: '',
+      ),
+    ];
+    service.channelPlaylistsToReturn = [
+      const YoutubePlaylistItem(
+        id: 'pl-1',
+        title: 'Parachutes',
+        thumbnailUrl: '',
+        videoCount: 2,
+        author: 'Coldplay',
+      ),
+    ];
+    service.playlistTracksToReturn = [
+      const YoutubeSearchItem(
+        id: 'pl-t1',
+        title: 'Don\'t Panic',
+        channelName: 'Coldplay',
+        thumbnailUrl: '',
+      ),
+      const YoutubeSearchItem(
+        id: 'pl-t2',
+        title: 'Shiver',
+        channelName: 'Coldplay',
+        thumbnailUrl: '',
+      ),
+    ];
+
+    await openSearch(tester, service);
+    await submit(tester, 'coldplay');
+    service.response.complete([sample]);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Channels'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Coldplay'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Playlists'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Parachutes'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Don\'t Panic'), findsOneWidget);
+    expect(find.text('Shiver'), findsOneWidget);
+
+    // Search in playlist
+    final inPlaylistSearch = find.widgetWithText(TextField, 'Search tracks in playlist…');
+    expect(inPlaylistSearch, findsOneWidget);
+
+    await tester.enterText(inPlaylistSearch, 'Panic');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Don\'t Panic'), findsOneWidget);
+    expect(find.text('Shiver'), findsNothing);
   });
 }
 

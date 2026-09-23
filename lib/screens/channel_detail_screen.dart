@@ -37,6 +37,7 @@ class ChannelDetailScreen extends StatefulWidget {
 class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
   late YoutubeChannelItem _channel;
   final _searchController = TextEditingController();
+  final _playlistSearchController = TextEditingController();
 
   List<YoutubeSearchItem> _videos = [];
   List<YoutubePlaylistItem> _playlists = [];
@@ -47,7 +48,12 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
   bool _hasMoreUploads = false;
   dynamic _uploadContinuation;
 
+  bool _isLoadingMorePlaylists = false;
+  bool _hasMorePlaylists = false;
+  String? _playlistContinuation;
+
   List<YoutubeSearchItem>? _inChannelSearchResults;
+  List<YoutubePlaylistItem>? _inPlaylistSearchResults;
   bool _isSearchingInChannel = false;
   String? _error;
 
@@ -71,6 +77,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
     widget.storage.removeListener(_onUpdate);
     widget.downloadService?.removeListener(_onUpdate);
     _searchController.dispose();
+    _playlistSearchController.dispose();
     super.dispose();
   }
 
@@ -111,12 +118,12 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
 
       final playlistsFuture = () async {
         try {
-          return await widget.youtubeService.getChannelPlaylists(
+          return await widget.youtubeService.getChannelPlaylistsPage(
             _channel.title,
             channelId: _channel.id,
           );
         } catch (_) {
-          return <YoutubePlaylistItem>[];
+          return const ChannelPlaylistsPage(items: []);
         }
       }();
 
@@ -124,13 +131,15 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
       if (!mounted) return;
 
       final details = results[0] as YoutubeChannelItem?;
-      final playlists = results[1] as List<YoutubePlaylistItem>;
+      final playlistsPage = results[1] as ChannelPlaylistsPage;
 
       setState(() {
         _videos = pageResult.items;
         _hasMoreUploads = pageResult.hasMore;
         _uploadContinuation = pageResult.continuation;
-        _playlists = playlists;
+        _playlists = playlistsPage.items;
+        _hasMorePlaylists = playlistsPage.hasMore;
+        _playlistContinuation = playlistsPage.continuation;
 
         if (details != null) {
           _channel = YoutubeChannelItem(
@@ -235,6 +244,49 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
     }
   }
 
+  Future<void> _loadMorePlaylists() async {
+    if (_isLoadingMorePlaylists || !_hasMorePlaylists) return;
+    setState(() => _isLoadingMorePlaylists = true);
+
+    try {
+      final nextPage = await widget.youtubeService.getChannelPlaylistsPage(
+        _channel.title,
+        channelId: _channel.id,
+        continuation: _playlistContinuation,
+      );
+      if (!mounted) return;
+      setState(() {
+        _playlists.addAll(nextPage.items);
+        _hasMorePlaylists = nextPage.hasMore;
+        _playlistContinuation = nextPage.continuation;
+        _isLoadingMorePlaylists = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingMorePlaylists = false);
+    }
+  }
+
+  void _searchInPlaylists(String query) {
+    final trimmed = query.trim().toLowerCase();
+    if (trimmed.isEmpty) {
+      setState(() => _inPlaylistSearchResults = null);
+      return;
+    }
+    final matches = _playlists
+        .where(
+          (p) =>
+              p.title.toLowerCase().contains(trimmed) ||
+              (p.author?.toLowerCase().contains(trimmed) ?? false),
+        )
+        .toList();
+    setState(() => _inPlaylistSearchResults = matches);
+  }
+
+  void _clearPlaylistSearch() {
+    _playlistSearchController.clear();
+    setState(() => _inPlaylistSearchResults = null);
+  }
+
   void _clearInChannelSearch() {
     _searchController.clear();
     setState(() {
@@ -250,6 +302,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
     final videoCount = _channel.formattedVideoCount;
 
     final displayedVideos = _inChannelSearchResults ?? _videos;
+    final displayedPlaylists = _inPlaylistSearchResults ?? _playlists;
 
     return Scaffold(
       appBar: AppBar(
@@ -403,7 +456,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   ChoiceChip(
-                                    label: Text('Tracks (${_videos.length})'),
+                                    label: const Text('Tracks'),
                                     selected: _currentTab == ChannelTab.tracks,
                                     showCheckmark: false,
                                     avatar: const Icon(Icons.music_note, size: 16),
@@ -416,7 +469,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                                   ),
                                   const SizedBox(width: 8),
                                   ChoiceChip(
-                                    label: Text('Playlists (${_playlists.length})'),
+                                    label: const Text('Playlists'),
                                     selected: _currentTab == ChannelTab.playlists,
                                     showCheckmark: false,
                                     avatar: const Icon(Icons.playlist_play, size: 18),
@@ -579,14 +632,73 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
 
                     // PLAYLISTS TAB VIEW
                     if (_currentTab == ChannelTab.playlists) ...[
-                      if (_playlists.isEmpty)
-                        const SliverFillRemaining(
+                      // In-Channel Playlist Search Input
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: TextField(
+                            controller: _playlistSearchController,
+                            textInputAction: TextInputAction.search,
+                            onChanged: _searchInPlaylists,
+                            onSubmitted: _searchInPlaylists,
+                            decoration: InputDecoration(
+                              hintText: 'Search playlists in ${_channel.title}…',
+                              prefixIcon: const Icon(Icons.search, size: 20),
+                              suffixIcon: _playlistSearchController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear, size: 18),
+                                      onPressed: _clearPlaylistSearch,
+                                    )
+                                  : null,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                              filled: true,
+                              fillColor: theme.colorScheme.surfaceContainerHighest
+                                  .withAlpha(120),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      if (_inPlaylistSearchResults != null)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                            child: Row(
+                              children: [
+                                Text(
+                                  'Matching Playlists (${displayedPlaylists.length})',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: theme.colorScheme.primary,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const Spacer(),
+                                TextButton(
+                                  onPressed: _clearPlaylistSearch,
+                                  child: const Text('Show All'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      if (displayedPlaylists.isEmpty)
+                        SliverFillRemaining(
                           hasScrollBody: false,
                           child: Center(
                             child: Padding(
-                              padding: EdgeInsets.all(24),
+                              padding: const EdgeInsets.all(24),
                               child: Text(
-                                'No playlists found for this channel.',
+                                _inPlaylistSearchResults != null
+                                    ? 'No playlists matching "${_playlistSearchController.text}".'
+                                    : 'No playlists found for this channel.',
                                 textAlign: TextAlign.center,
                               ),
                             ),
@@ -596,7 +708,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                         SliverList(
                           delegate: SliverChildBuilderDelegate(
                             (context, index) {
-                              final playlist = _playlists[index];
+                              final playlist = displayedPlaylists[index];
                               return ChannelPlaylistTile(
                                 playlist: playlist,
                                 onTap: () {
@@ -619,9 +731,39 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                                 },
                               );
                             },
-                            childCount: _playlists.length,
+                            childCount: displayedPlaylists.length,
                           ),
                         ),
+
+                        // Load More Playlists Button
+                        if (_inPlaylistSearchResults == null && _hasMorePlaylists)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 32,
+                                vertical: 16,
+                              ),
+                              child: Center(
+                                child: _isLoadingMorePlaylists
+                                    ? const SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : FilledButton.tonalIcon(
+                                        icon: const Icon(
+                                          Icons.expand_more,
+                                          size: 18,
+                                        ),
+                                        label: const Text('Load More Playlists'),
+                                        onPressed: _loadMorePlaylists,
+                                      ),
+                              ),
+                            ),
+                          ),
+
                         const SliverToBoxAdapter(
                           child: SizedBox(height: 100),
                         ),

@@ -35,6 +35,8 @@ class _YoutubePlaylistDetailScreenState
   late final _youtubeService = widget.youtubeService ?? YoutubeService();
 
   List<YoutubeSearchItem> _tracks = [];
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
   bool _isLoading = true;
   String? _error;
 
@@ -42,6 +44,12 @@ class _YoutubePlaylistDetailScreenState
   void initState() {
     super.initState();
     _loadTracks();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadTracks() async {
@@ -73,6 +81,16 @@ class _YoutubePlaylistDetailScreenState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final query = _searchQuery.trim().toLowerCase();
+    final displayedTracks = query.isEmpty
+        ? _tracks
+        : _tracks
+            .where(
+              (t) =>
+                  t.title.toLowerCase().contains(query) ||
+                  t.channelName.toLowerCase().contains(query),
+            )
+            .toList();
 
     return Scaffold(
       body: Stack(
@@ -173,26 +191,68 @@ class _YoutubePlaylistDetailScreenState
               if (!_isLoading && _tracks.isNotEmpty)
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         FilledButton.icon(
                           icon: const Icon(Icons.play_arrow, size: 20),
                           label: const Text('Play All'),
-                          onPressed: () => widget.playback.playQueue(_tracks),
+                          onPressed: () => widget.playback.playQueue(
+                            displayedTracks.isNotEmpty ? displayedTracks : _tracks,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         OutlinedButton.icon(
                           icon: const Icon(Icons.shuffle, size: 18),
                           label: const Text('Shuffle'),
                           onPressed: () {
-                            final shuffled = List<YoutubeSearchItem>.from(_tracks)
-                              ..shuffle();
+                            final pool = displayedTracks.isNotEmpty
+                                ? displayedTracks
+                                : _tracks;
+                            final shuffled =
+                                List<YoutubeSearchItem>.from(pool)..shuffle();
                             widget.playback.playQueue(shuffled);
                           },
                         ),
                       ],
+                    ),
+                  ),
+                ),
+
+              // In-Playlist Search Input
+              if (!_isLoading && _tracks.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (val) =>
+                          setState(() => _searchQuery = val.trim()),
+                      decoration: InputDecoration(
+                        hintText: 'Search tracks in playlist…',
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                              )
+                            : null,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: theme.colorScheme.surfaceContainerHighest
+                            .withAlpha(120),
+                      ),
                     ),
                   ),
                 ),
@@ -229,10 +289,19 @@ class _YoutubePlaylistDetailScreenState
                     ),
                   ),
                 )
-              else if (_tracks.isEmpty)
-                const SliverFillRemaining(
+              else if (displayedTracks.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
                   child: Center(
-                    child: Text('No tracks found in this playlist.'),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        _searchQuery.isNotEmpty
+                            ? 'No tracks matching "$_searchQuery" in this playlist.'
+                            : 'No tracks found in this playlist.',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
                   ),
                 )
               else
@@ -241,7 +310,7 @@ class _YoutubePlaylistDetailScreenState
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
-                        final track = _tracks[index];
+                        final track = displayedTracks[index];
                         return TrackTile(
                           item: track,
                           playback: widget.playback,
@@ -249,7 +318,7 @@ class _YoutubePlaylistDetailScreenState
                           downloadService: widget.downloadService,
                         );
                       },
-                      childCount: _tracks.length,
+                      childCount: displayedTracks.length,
                     ),
                   ),
                 ),
