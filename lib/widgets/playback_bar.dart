@@ -47,145 +47,195 @@ class PlaybackBar extends StatelessWidget {
             ? 'Playing'
             : 'Paused');
 
-    return Material(
-      color: theme.colorScheme.surfaceContainerHigh,
-      elevation: 6,
-      child: InkWell(
-        onTap: () {
-          if (storageService != null) {
-            FullPlayerSheet.show(
-              context,
-              playback: controller,
-              storage: storageService!,
-              downloadService: downloadService,
-              onOpenQueue: onOpenQueue,
-            );
-          }
-        },
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Thin progress indicator along top of bar
-            LinearProgressIndicator(
-              value: controller.isLoading ? null : progress,
-              minHeight: 2.5,
-              backgroundColor: Colors.transparent,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                theme.colorScheme.primary,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-              child: Row(
-                children: [
-                  // Thumbnail
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: item.thumbnailUrl.isNotEmpty
-                        ? Image.network(
-                            item.thumbnailUrl,
-                            width: 48,
-                            height: 48,
-                            fit: BoxFit.cover,
-                            excludeFromSemantics: true,
-                            errorBuilder: (context, error, stackTrace) =>
-                                Container(
-                                  width: 48,
-                                  height: 48,
-                                  color:
-                                      theme.colorScheme.surfaceContainerHighest,
-                                  child: const Icon(Icons.music_note, size: 24),
-                                ),
-                          )
-                        : Container(
-                            width: 48,
-                            height: 48,
-                            color: theme.colorScheme.surfaceContainerHighest,
-                            child: const Icon(Icons.music_note, size: 24),
-                          ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Title & Channel
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          item.channelName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          status,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: error != null
-                                ? theme.colorScheme.error
-                                : theme.colorScheme.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Play/Pause button
-                  if (controller.isLoading)
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          semanticsLabel: 'Loading audio',
-                        ),
-                      ),
-                    )
-                  else
-                    IconButton(
-                      tooltip: controller.error != null
-                          ? 'Retry playback'
-                          : controller.isCompleted
-                          ? 'Replay'
-                          : controller.isPlaying
-                          ? 'Pause'
-                          : 'Play',
-                      onPressed: controller.togglePlayback,
-                      icon: Icon(
-                        controller.error != null
-                            ? Icons.refresh
-                            : controller.isCompleted
-                            ? Icons.replay
-                            : controller.isPlaying
-                            ? Icons.pause
-                            : Icons.play_arrow,
-                      ),
-                    ),
-                  // Skip Next button
-                  IconButton(
-                    icon: const Icon(Icons.skip_next),
-                    tooltip: 'Next',
-                    onPressed: controller.hasNext ? controller.skipToNext : null,
-                  ),
-                ],
-              ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Colors.white.withAlpha(16),
+            width: 0.8,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(120),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
           ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              if (storageService != null) {
+                FullPlayerSheet.show(
+                  context,
+                  playback: controller,
+                  storage: storageService!,
+                  downloadService: downloadService,
+                  onOpenQueue: onOpenQueue,
+                );
+              }
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+                  child: Row(
+                    children: [
+                      // Rounded Thumbnail
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: item.thumbnailUrl.isNotEmpty
+                            ? Image.network(
+                                item.thumbnailUrl,
+                                width: 46,
+                                height: 46,
+                                fit: BoxFit.cover,
+                                excludeFromSemantics: true,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Container(
+                                  width: 46,
+                                  height: 46,
+                                  color: theme.colorScheme.surfaceContainerHighest,
+                                  child: const Icon(Icons.music_note, size: 22),
+                                ),
+                              )
+                            : Container(
+                                width: 46,
+                                height: 46,
+                                color: theme.colorScheme.surfaceContainerHighest,
+                                child: const Icon(Icons.music_note, size: 22),
+                              ),
+                      ),
+                      const SizedBox(width: 12),
+
+                      // Title & Subtitle Info
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13.5,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                if (controller.isLoading || controller.isBuffering) ...[
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    margin: const EdgeInsets.only(right: 6),
+                                    decoration: BoxDecoration(
+                                      color: theme.colorScheme.primary,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ],
+                                Expanded(
+                                  child: Text(
+                                    error ?? status,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: error != null
+                                          ? theme.colorScheme.error
+                                          : theme.colorScheme.onSurfaceVariant,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+
+                      // Play/Pause circular accent button
+                      if (controller.isLoading)
+                        const Padding(
+                          padding: EdgeInsets.all(10),
+                          child: SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              semanticsLabel: 'Loading audio',
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withAlpha(35),
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            iconSize: 22,
+                            padding: EdgeInsets.zero,
+                            tooltip: controller.error != null
+                                ? 'Retry playback'
+                                : controller.isCompleted
+                                ? 'Replay'
+                                : controller.isPlaying
+                                ? 'Pause'
+                                : 'Play',
+                            onPressed: controller.togglePlayback,
+                            icon: Icon(
+                              controller.error != null
+                                  ? Icons.refresh
+                                  : controller.isCompleted
+                                  ? Icons.replay
+                                  : controller.isPlaying
+                                  ? Icons.pause
+                                  : Icons.play_arrow,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+
+                      // Skip Next button
+                      IconButton(
+                        iconSize: 22,
+                        padding: const EdgeInsets.all(8),
+                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                        icon: const Icon(Icons.skip_next),
+                        tooltip: 'Next',
+                        onPressed: controller.hasNext ? controller.skipToNext : null,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Bottom-pinned curved progress bar
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8)),
+                  child: LinearProgressIndicator(
+                    value: controller.isLoading ? null : progress,
+                    minHeight: 2.5,
+                    backgroundColor: theme.colorScheme.outlineVariant.withAlpha(60),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      theme.colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

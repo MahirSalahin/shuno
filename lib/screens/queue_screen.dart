@@ -241,63 +241,104 @@ class QueueScreen extends StatelessWidget {
                             final item = upNext[index];
                             final actualIndex = currentIndex + 1 + index;
 
-                            return Dismissible(
-                              key: ValueKey('upnext_${item.id}_$actualIndex'),
-                              direction: DismissDirection.endToStart,
-                              background: Container(
-                                alignment: Alignment.centerRight,
-                                padding: const EdgeInsets.only(right: 20),
-                                color: theme.colorScheme.error,
-                                child: const Icon(Icons.delete,
-                                    color: Colors.white),
+                            return Container(
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 2,
                               ),
-                              onDismissed: (_) =>
-                                  playback.removeAt(actualIndex),
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surfaceContainerLow,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: theme.colorScheme.outlineVariant
+                                      .withAlpha(50),
+                                  width: 0.8,
                                 ),
-                                leading: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ReorderableDragStartListener(
-                                      index: index,
-                                      child: const Icon(Icons.drag_handle),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: Dismissible(
+                                key: ValueKey('upnext_${item.id}_$actualIndex'),
+                                direction: DismissDirection.endToStart,
+                                background: Container(
+                                  alignment: Alignment.centerRight,
+                                  padding: const EdgeInsets.only(right: 20),
+                                  color: theme.colorScheme.error,
+                                  child: const Icon(
+                                    Icons.delete,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                onDismissed: (_) =>
+                                    playback.removeAt(actualIndex),
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 0,
+                                  ),
+                                  leading: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ReorderableDragStartListener(
+                                        index: index,
+                                        child: Icon(
+                                          Icons.drag_indicator,
+                                          color: theme.colorScheme.outline,
+                                          size: 18,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: item.thumbnailUrl.isNotEmpty
+                                            ? Image.network(
+                                                item.thumbnailUrl,
+                                                width: 40,
+                                                height: 40,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (context, error,
+                                                        stackTrace) =>
+                                                    Container(
+                                                  width: 40,
+                                                  height: 40,
+                                                  color: theme.colorScheme.surfaceContainerHighest,
+                                                  child: const Icon(Icons.music_note, size: 20),
+                                                ),
+                                              )
+                                            : Container(
+                                                width: 40,
+                                                height: 40,
+                                                color: theme.colorScheme.surfaceContainerHighest,
+                                                child: const Icon(Icons.music_note, size: 20),
+                                              ),
+                                      ),
+                                    ],
+                                  ),
+                                  title: Text(
+                                    item.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
                                     ),
-                                    const SizedBox(width: 8),
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(4),
-                                      child: item.thumbnailUrl.isNotEmpty
-                                          ? Image.network(
-                                              item.thumbnailUrl,
-                                              width: 44,
-                                              height: 32,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (context, error,
-                                                      stackTrace) =>
-                                                  const Icon(Icons.music_note),
-                                            )
-                                          : const Icon(Icons.music_note),
+                                  ),
+                                  subtitle: Text(
+                                    item.channelName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: theme.colorScheme.onSurfaceVariant,
                                     ),
-                                  ],
+                                  ),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.close, size: 18),
+                                    tooltip: 'Remove from queue',
+                                    onPressed: () =>
+                                        playback.removeAt(actualIndex),
+                                  ),
+                                  onTap: () => playback.playItem(item),
                                 ),
-                                title: Text(
-                                  item.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                subtitle: Text(
-                                  item.channelName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.close, size: 18),
-                                  tooltip: 'Remove from queue',
-                                  onPressed: () =>
-                                      playback.removeAt(actualIndex),
-                                ),
-                                onTap: () => playback.playItem(item),
                               ),
                             );
                           },

@@ -82,52 +82,65 @@ class _HomeNavigationScreenState extends State<HomeNavigationScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (widget.playbackController.selected != null)
-            PlaybackBar(
-              controller: widget.playbackController,
-              storageService: widget.storageService,
-              downloadService: widget.downloadService,
-              onOpenQueue: () => setState(() => _currentIndex = 2),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.playbackController.selected != null)
+              PlaybackBar(
+                controller: widget.playbackController,
+                storageService: widget.storageService,
+                downloadService: widget.downloadService,
+                onOpenQueue: () => setState(() => _currentIndex = 2),
+              ),
+            Container(
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: Theme.of(context).colorScheme.outlineVariant.withAlpha(80),
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: NavigationBar(
+                selectedIndex: _currentIndex,
+                onDestinationSelected: (index) =>
+                    setState(() => _currentIndex = index),
+                destinations: [
+                  const NavigationDestination(
+                    icon: Icon(Icons.search),
+                    selectedIcon: Icon(Icons.search),
+                    label: 'Search',
+                  ),
+                  const NavigationDestination(
+                    icon: Icon(Icons.library_music_outlined),
+                    selectedIcon: Icon(Icons.library_music),
+                    label: 'Library',
+                  ),
+                  NavigationDestination(
+                    icon: Badge(
+                      isLabelVisible: upcomingCount > 0,
+                      label: Text('$upcomingCount'),
+                      child: const Icon(Icons.queue_music_outlined),
+                    ),
+                    selectedIcon: Badge(
+                      isLabelVisible: upcomingCount > 0,
+                      label: Text('$upcomingCount'),
+                      child: const Icon(Icons.queue_music),
+                    ),
+                    label: 'Queue',
+                  ),
+                  const NavigationDestination(
+                    icon: Icon(Icons.settings_outlined),
+                    selectedIcon: Icon(Icons.settings),
+                    label: 'Settings',
+                  ),
+                ],
+              ),
             ),
-          NavigationBar(
-            selectedIndex: _currentIndex,
-            onDestinationSelected: (index) =>
-                setState(() => _currentIndex = index),
-            destinations: [
-              const NavigationDestination(
-                icon: Icon(Icons.search),
-                selectedIcon: Icon(Icons.search, color: Colors.tealAccent),
-                label: 'Search',
-              ),
-              const NavigationDestination(
-                icon: Icon(Icons.library_music_outlined),
-                selectedIcon: Icon(Icons.library_music, color: Colors.tealAccent),
-                label: 'Library',
-              ),
-              NavigationDestination(
-                icon: Badge(
-                  isLabelVisible: upcomingCount > 0,
-                  label: Text('$upcomingCount'),
-                  child: const Icon(Icons.queue_music_outlined),
-                ),
-                selectedIcon: Badge(
-                  isLabelVisible: upcomingCount > 0,
-                  label: Text('$upcomingCount'),
-                  child: const Icon(Icons.queue_music, color: Colors.tealAccent),
-                ),
-                label: 'Queue',
-              ),
-              const NavigationDestination(
-                icon: Icon(Icons.settings_outlined),
-                selectedIcon: Icon(Icons.settings, color: Colors.tealAccent),
-                label: 'Settings',
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

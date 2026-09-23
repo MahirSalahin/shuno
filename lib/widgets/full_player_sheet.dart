@@ -292,89 +292,113 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
             ),
             const SizedBox(height: 12),
 
-            // Artwork with Double-Tap to Seek (+/- 10s)
+            // Artwork with Double-Tap to Seek (+/- 10s) and Ambient Glow
             Center(
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final artworkWidth = constraints.maxWidth.clamp(0.0, 320.0);
-                  return GestureDetector(
-                    onDoubleTapDown: (details) =>
-                        _onDoubleTapDown(details, artworkWidth),
-                    child: Container(
-                      width: artworkWidth,
-                      height: artworkWidth,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withAlpha(89),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            item.thumbnailUrl.isNotEmpty
-                                ? Image.network(
-                                    item.thumbnailUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder:
-                                        (context, error, stackTrace) =>
-                                            Container(
-                                      color: theme
-                                          .colorScheme.surfaceContainerHighest,
-                                      child: const Icon(
-                                        Icons.music_note,
-                                        size: 80,
-                                      ),
-                                    ),
-                                  )
-                                : Container(
-                                    color: theme
-                                        .colorScheme.surfaceContainerHighest,
-                                    child: const Icon(
-                                      Icons.music_note,
-                                      size: 80,
-                                    ),
-                                  ),
-
-                            // Seek Feedback Overlay
-                            if (_seekFeedback != 0)
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                color: Colors.black54,
-                                child: Center(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        _seekFeedback < 0
-                                            ? Icons.replay_10
-                                            : Icons.forward_10,
-                                        size: 56,
-                                        color: Colors.white,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        _seekFeedback < 0 ? '-10s' : '+10s',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                  return Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Ambient Glow behind album artwork
+                      Container(
+                        width: artworkWidth * 0.82,
+                        height: artworkWidth * 0.82,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: theme.colorScheme.primary.withAlpha(55),
+                              blurRadius: 65,
+                              spreadRadius: 8,
+                            ),
                           ],
                         ),
                       ),
-                    ),
+                      GestureDetector(
+                        onDoubleTapDown: (details) =>
+                            _onDoubleTapDown(details, artworkWidth),
+                        child: Container(
+                          width: artworkWidth,
+                          height: artworkWidth,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Colors.white.withAlpha(20),
+                              width: 1,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withAlpha(160),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                item.thumbnailUrl.isNotEmpty
+                                    ? Image.network(
+                                        item.thumbnailUrl,
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) =>
+                                                Container(
+                                          color: theme
+                                              .colorScheme.surfaceContainerHighest,
+                                          child: const Icon(
+                                            Icons.music_note,
+                                            size: 80,
+                                          ),
+                                        ),
+                                      )
+                                    : Container(
+                                        color: theme
+                                            .colorScheme.surfaceContainerHighest,
+                                        child: const Icon(
+                                          Icons.music_note,
+                                          size: 80,
+                                        ),
+                                      ),
+
+                                // Seek Feedback Overlay
+                                if (_seekFeedback != 0)
+                                  AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    color: Colors.black54,
+                                    child: Center(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            _seekFeedback < 0
+                                                ? Icons.replay_10
+                                                : Icons.forward_10,
+                                            size: 56,
+                                            color: Colors.white,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            _seekFeedback < 0 ? '-10s' : '+10s',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   );
                 },
               ),
@@ -394,6 +418,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
+                          letterSpacing: -0.2,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -403,6 +428,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
@@ -425,8 +451,10 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
             SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                trackHeight: 4,
+                trackHeight: 3.5,
                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                activeTrackColor: theme.colorScheme.primary,
+                thumbColor: theme.colorScheme.primary,
               ),
               child: Slider(
                 value: currentSeconds,
@@ -445,19 +473,19 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                   Text(
                     _formatDuration(position),
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.outline,
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                   Text(
                     _formatDuration(duration),
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.outline,
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
 
             // Playback Controls Row
             Row(
@@ -481,7 +509,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                   tooltip: 'Previous',
                   onPressed: playback.skipToPrevious,
                 ),
-                // Play / Pause / Replay
+                // Play / Pause / Replay with Glow
                 if (playback.isLoading)
                   const SizedBox(
                     width: 64,
@@ -491,27 +519,41 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                     ),
                   )
                 else
-                  IconButton.filled(
-                    iconSize: 40,
-                    style: IconButton.styleFrom(
-                      padding: const EdgeInsets.all(12),
+                  Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: theme.colorScheme.primary.withAlpha(90),
+                          blurRadius: 18,
+                          spreadRadius: 1,
+                        ),
+                      ],
                     ),
-                    tooltip: playback.error != null
-                        ? 'Retry'
-                        : playback.isCompleted
-                        ? 'Replay'
-                        : playback.isPlaying
-                        ? 'Pause'
-                        : 'Play',
-                    onPressed: playback.togglePlayback,
-                    icon: Icon(
-                      playback.error != null
-                          ? Icons.refresh
+                    child: IconButton.filled(
+                      iconSize: 38,
+                      style: IconButton.styleFrom(
+                        backgroundColor: theme.colorScheme.primary,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.all(14),
+                      ),
+                      tooltip: playback.error != null
+                          ? 'Retry'
                           : playback.isCompleted
-                          ? Icons.replay
+                          ? 'Replay'
                           : playback.isPlaying
-                          ? Icons.pause
-                          : Icons.play_arrow,
+                          ? 'Pause'
+                          : 'Play',
+                      onPressed: playback.togglePlayback,
+                      icon: Icon(
+                        playback.error != null
+                            ? Icons.refresh
+                            : playback.isCompleted
+                            ? Icons.replay
+                            : playback.isPlaying
+                            ? Icons.pause
+                            : Icons.play_arrow,
+                      ),
                     ),
                   ),
                 // Next

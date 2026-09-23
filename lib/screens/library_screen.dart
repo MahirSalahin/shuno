@@ -202,19 +202,40 @@ class _LibraryScreenState extends State<LibraryScreen>
                   itemCount: playlists.length,
                   itemBuilder: (context, index) {
                     final pl = playlists[index];
-                    return ListTile(
-                      leading: Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          Icons.playlist_play,
-                          color: theme.colorScheme.onPrimaryContainer,
+                    return Container(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 2.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: theme.colorScheme.outlineVariant.withAlpha(60),
+                          width: 0.8,
                         ),
                       ),
+                      clipBehavior: Clip.antiAlias,
+                      child: ListTile(
+                        leading: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                theme.colorScheme.primary.withAlpha(60),
+                                theme.colorScheme.primary.withAlpha(20),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            Icons.playlist_play,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
                       title: Text(
                         pl.title,
                         maxLines: 1,
@@ -283,8 +304,9 @@ class _LibraryScreenState extends State<LibraryScreen>
                           ),
                         );
                       },
-                    );
-                  },
+                    ),
+                  );
+                },
                 ),
         ),
       ],

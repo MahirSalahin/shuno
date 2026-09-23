@@ -41,49 +41,74 @@ class TrackTile extends StatelessWidget {
     final isDownloading = downloadService?.isDownloading(item.id) ?? false;
     final duration = item.durationLabel;
 
-    return Card(
-      elevation: isSelected ? 2 : 0,
-      color: isSelected
-          ? theme.colorScheme.primaryContainer.withAlpha(77)
-          : theme.colorScheme.surfaceContainerLow,
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2.5),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? theme.colorScheme.primary.withAlpha(26)
+            : theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isSelected
+              ? theme.colorScheme.primary.withAlpha(160)
+              : theme.colorScheme.outlineVariant.withAlpha(60),
+          width: isSelected ? 1.2 : 0.8,
+        ),
+      ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap ?? (playback.isLoading ? null : () => playback.playItem(item)),
         child: Padding(
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  // Thumbnail + Equalizer
+                  // Active left accent indicator bar if playing
+                  if (isSelected)
+                    Container(
+                      width: 3,
+                      height: 40,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary,
+                        borderRadius: BorderRadius.circular(2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: theme.colorScheme.primary.withAlpha(140),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                    ),
+                  // Square Artwork + Equalizer (Spotify aesthetic)
                   Stack(
                     alignment: Alignment.center,
                     children: [
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(6),
                         child: item.thumbnailUrl.isNotEmpty
                             ? Image.network(
                                 item.thumbnailUrl,
-                                width: 72,
-                                height: 52,
+                                width: 50,
+                                height: 50,
                                 fit: BoxFit.cover,
                                 excludeFromSemantics: true,
                                 errorBuilder: (context, error, stackTrace) =>
                                     Container(
-                                  width: 72,
-                                  height: 52,
+                                  width: 50,
+                                  height: 50,
                                   color: theme.colorScheme.surfaceContainerHighest,
-                                  child: const Icon(Icons.image_not_supported_outlined),
+                                  child: const Icon(Icons.image_not_supported_outlined, size: 22),
                                 ),
                               )
                             : Container(
-                                width: 72,
-                                height: 52,
+                                width: 50,
+                                height: 50,
                                 color: theme.colorScheme.surfaceContainerHighest,
-                                child: const Icon(Icons.music_note),
+                                child: const Icon(Icons.music_note, size: 24),
                               ),
                       ),
                       if (isSelected)
@@ -91,26 +116,26 @@ class TrackTile extends StatelessWidget {
                           child: Container(
                             decoration: BoxDecoration(
                               color: Colors.black54,
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(6),
                             ),
                             child: Center(
                               child: playback.isPlaying
                                   ? AnimatedEqualizer(
                                       color: theme.colorScheme.primary,
                                       isPlaying: true,
-                                      size: 24,
+                                      size: 20,
                                     )
                                   : Icon(
                                       Icons.pause_circle_outline,
                                       color: theme.colorScheme.primary,
-                                      size: 26,
+                                      size: 24,
                                     ),
                             ),
                           ),
                         ),
                     ],
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
 
                   // Track Info
                   Expanded(

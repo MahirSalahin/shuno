@@ -7,6 +7,7 @@ import 'services/download_service.dart';
 import 'services/playback_controller.dart';
 import 'services/storage_service.dart';
 import 'services/youtube_service.dart';
+import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -68,32 +69,22 @@ class ShunoApp extends StatelessWidget {
         );
     final download = downloadService ?? DownloadService(storageService: storage);
 
-    return MaterialApp(
-      title: 'Shuno',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF8EDBC5),
-          brightness: Brightness.dark,
-        ),
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(),
-        ),
-        cardTheme: const CardThemeData(
-          clipBehavior: Clip.antiAlias,
-        ),
-        navigationBarTheme: const NavigationBarThemeData(
-          height: 64,
-          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        ),
-      ),
-      home: HomeNavigationScreen(
-        youtubeService: youtube,
-        storageService: storage,
-        playbackController: playback,
-        downloadService: download,
-      ),
+    return ListenableBuilder(
+      listenable: storage,
+      builder: (context, _) {
+        final palette = AppPalette.fromId(storage.themeKey);
+        return MaterialApp(
+          title: 'Shuno',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.buildTheme(palette),
+          home: HomeNavigationScreen(
+            youtubeService: youtube,
+            storageService: storage,
+            playbackController: playback,
+            downloadService: download,
+          ),
+        );
+      },
     );
   }
 }

@@ -19,6 +19,7 @@ class StorageService extends ChangeNotifier {
   final List<String> _recentSearches = [];
   bool _autoplay = true;
   String _audioQuality = 'high'; // 'high' or 'saver'
+  String _themeKey = 'emerald'; // 'emerald', 'cyan', 'amethyst', 'amber'
 
   List<YoutubeSearchItem> get favorites => List.unmodifiable(_favorites);
   List<YoutubeSearchItem> get history => List.unmodifiable(_history);
@@ -27,6 +28,7 @@ class StorageService extends ChangeNotifier {
   List<String> get recentSearches => List.unmodifiable(_recentSearches);
   bool get autoplay => _autoplay;
   String get audioQuality => _audioQuality;
+  String get themeKey => _themeKey;
   bool get isInitialized => _initialized;
 
   Future<void> init({File? overrideFile}) async {
@@ -103,6 +105,9 @@ class StorageService extends ChangeNotifier {
       if (data['audioQuality'] is String) {
         _audioQuality = data['audioQuality'] as String;
       }
+      if (data['themeKey'] is String) {
+        _themeKey = data['themeKey'] as String;
+      }
     } catch (e) {
       if (kDebugMode) debugPrint('Error loading storage: $e');
     }
@@ -121,11 +126,19 @@ class StorageService extends ChangeNotifier {
         'recentSearches': _recentSearches,
         'autoplay': _autoplay,
         'audioQuality': _audioQuality,
+        'themeKey': _themeKey,
       };
       await file.writeAsString(jsonEncode(data), flush: true);
     } catch (e) {
       if (kDebugMode) debugPrint('Error saving storage: $e');
     }
+  }
+
+  Future<void> setThemeKey(String key) async {
+    if (_themeKey == key) return;
+    _themeKey = key;
+    notifyListeners();
+    await _saveToDisk();
   }
 
   // --- Favorites ---

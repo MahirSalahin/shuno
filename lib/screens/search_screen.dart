@@ -151,40 +151,48 @@ class _SearchScreenState extends State<SearchScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: Row(
                 children: [
-                  TextField(
-                    controller: _queryController,
-                    enabled: !_isLoading,
-                    textInputAction: TextInputAction.search,
-                    onSubmitted: (_) => _search(),
-                    onChanged: (_) {
-                      if (_inputError != null) {
-                        setState(() => _inputError = null);
-                      }
-                    },
-                    decoration: InputDecoration(
-                      labelText: 'Search YouTube',
-                      hintText: 'Song, artist, or album',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _queryController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () {
-                                _queryController.clear();
-                                setState(() {});
-                              },
-                            )
-                          : null,
-                      errorText: _inputError,
+                  Expanded(
+                    child: TextField(
+                      controller: _queryController,
+                      enabled: !_isLoading,
+                      textInputAction: TextInputAction.search,
+                      onSubmitted: (_) => _search(),
+                      onChanged: (_) {
+                        if (_inputError != null) {
+                          setState(() => _inputError = null);
+                        } else {
+                          setState(() {});
+                        }
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Search songs, artists, podcasts…',
+                        prefixIcon: const Icon(Icons.search, size: 22),
+                        suffixIcon: _queryController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () {
+                                  _queryController.clear();
+                                  setState(() {});
+                                },
+                              )
+                            : null,
+                        errorText: _inputError,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(width: 8),
                   FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(26),
+                      ),
+                    ),
                     onPressed: _isLoading ? null : () => _search(),
-                    icon: const Icon(Icons.search),
+                    icon: const Icon(Icons.search, size: 20),
                     label: const Text('Search'),
                   ),
                 ],
@@ -192,17 +200,40 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
             if (_results.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      '${_results.length} results',
-                      style: Theme.of(context).textTheme.bodySmall,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withAlpha(120),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${_results.length} tracks',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                      ),
                     ),
                     FilledButton.tonalIcon(
                       icon: const Icon(Icons.play_arrow, size: 18),
                       label: const Text('Play All'),
+                      style: FilledButton.styleFrom(
+                        shape: const StadiumBorder(),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                      ),
                       onPressed: () => _playback.playQueue(_results),
                     ),
                   ],
@@ -233,12 +264,46 @@ class _SearchScreenState extends State<SearchScreen> {
 
     if (!_hasSearched) {
       final recents = _storage.recentSearches;
-      if (recents.isNotEmpty) {
-        return SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+      return SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Compact prompt card (Space-wise & aesthetic)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant.withAlpha(80),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.search,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Search YouTube to get started.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            if (recents.isNotEmpty) ...[
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -247,6 +312,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
                           letterSpacing: 1.2,
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.bold,
                         ),
                   ),
                   TextButton(
@@ -263,19 +329,23 @@ class _SearchScreenState extends State<SearchScreen> {
                   return InputChip(
                     avatar: const Icon(Icons.history, size: 16),
                     label: Text(query),
+                    backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outlineVariant
+                            .withAlpha(100),
+                      ),
+                    ),
                     onPressed: () => _search(query),
                     onDeleted: () => _storage.removeRecentSearch(query),
                   );
                 }).toList(),
               ),
             ],
-          ),
-        );
-      }
-      return const Center(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(24),
-          child: Text('Search YouTube to get started.', textAlign: TextAlign.center),
+          ],
         ),
       );
     }
