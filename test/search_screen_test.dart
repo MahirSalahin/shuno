@@ -10,9 +10,14 @@ import 'package:shuno/services/youtube_service.dart';
 
 import 'helpers/fake_audio_player.dart';
 
+import 'package:shuno/models/youtube_channel_item.dart';
+import 'package:shuno/screens/channel_detail_screen.dart';
+
 class FakeYoutubeService extends YoutubeService {
   final queries = <String>[];
   Completer<List<YoutubeSearchItem>> response = Completer();
+  List<YoutubeChannelItem> channelsToReturn = [];
+  List<YoutubeSearchItem> channelVideosToReturn = [];
 
   @override
   Future<Uri> resolveAudioUrl(String videoId, {bool highQuality = true}) async =>
@@ -23,6 +28,17 @@ class FakeYoutubeService extends YoutubeService {
     queries.add(query);
     return response.future;
   }
+
+  @override
+  Future<List<YoutubeChannelItem>> searchChannels(String query) async =>
+      channelsToReturn;
+
+  @override
+  Future<List<YoutubeSearchItem>> getChannelVideos(
+    String channelId, {
+    String? channelName,
+    int limit = 30,
+  }) async => channelVideosToReturn;
 }
 
 const sample = YoutubeSearchItem(
@@ -179,5 +195,116 @@ void main() {
       ).durationLabel,
       isNull,
     );
+  });
+
+  testWidgets('only has one search bar on search screen', (tester) async {
+    final service = FakeYoutubeService();
+    await openSearch(tester, service);
+    expect(find.byType(TextField), findsOneWidget);
+  });
+
+  testWidgets('shows Tracks and Channels filter chips and switches between them', (
+    tester,
+  ) async {
+    final service = FakeYoutubeService();
+    service.channelsToReturn = [
+      const YoutubeChannelItem(
+        id: 'c-1',
+        title: 'Coldplay Official',
+        thumbnailUrl: 'https://example.com/coldplay.jpg',
+        subscriberCount: 25000000,
+        videoCount: 120,
+      ),
+    ];
+    await openSearch(tester, service);
+    await submit(tester, 'coldplay');
+    service.response.complete([sample]);
+    await tester.pumpAndSettle();
+
+    // Verify filter chips are present
+    expect(find.text('Tracks (1)'), findsOneWidget);
+    expect(find.text('Channels (1)'), findsOneWidget);
+
+    // Initial tab is Tracks: sample track is visible
+    expect(find.text('Example song'), findsOneWidget);
+    expect(find.text('Coldplay Official'), findsNothing);
+
+    // Switch to Channels tab
+    await tester.tap(find.text('Channels (1)'));
+    await tester.pumpAndSettle();
+
+    // Now channel is visible, track is not
+    expect(find.text('Coldplay Official'), findsOneWidget);
+    expect(find.text('Example song'), findsNothing);
+  });
+
+  testWidgets('tapping channel navigates to ChannelDetailScreen and loads tracks', (
+    tester,
+  ) async {
+    final service = FakeYoutubeService();
+    service.channelsToReturn = [
+      const YoutubeChannelItem(
+        id: 'c-1',
+        title: 'Coldplay Official',
+        thumbnailUrl: 'https://example.com/coldplay.jpg',
+        subscriberCount: 25000000,
+        videoCount: 120,
+      ),
+    ];
+    service.channelVideosToReturn = [
+      const YoutubeSearchItem(
+        id: 'track-c1',
+        title: 'Yellow',
+        channelName: 'Coldplay Official',
+        thumbnailUrl: 'https://example.com/yellow.jpg',
+        duration: Duration(minutes: 4, seconds: 29),
+      ),
+    ];
+
+    await openSearch(tester, service);
+    await submit(tester, 'coldplay');
+    service.response.complete([sample]);
+    await tester.pumpAndSettle();
+
+    // Switch to Channels
+    await tester.tap(find.text('Channels (1)'));
+    await tester.pumpAndSettle();
+
+    // Tap on channel tile
+    await tester.tap(find.text('Coldplay Official'));
+    await tester.pumpAndSettle();
+
+    // ChannelDetailScreen is now pushed
+    expect(find.byType(ChannelDetailScreen), findsOneWidget);
+    expect(find.text('Coldplay Official'), findsWidgets);
+    expect(find.text('Yellow'), findsOneWidget);
+    expect(find.text('Play All'), findsOneWidget);
+  });
+
+  testWidgets('filter chips and Play All do not overflow on narrow screens', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = FakeYoutubeService();
+    service.channelsToReturn = [
+      const YoutubeChannelItem(
+        id: 'c-1',
+        title: 'Channel',
+        thumbnailUrl: '',
+      ),
+    ];
+    await openSearch(tester, service);
+    await submit(tester, 'query');
+    service.response.complete([sample]);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tracks (1)'), findsOneWidget);
+    expect(find.text('Channels (1)'), findsOneWidget);
+    expect(find.text('Play All'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

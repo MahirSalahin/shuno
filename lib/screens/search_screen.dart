@@ -2,13 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../models/youtube_channel_item.dart';
 import '../models/youtube_search_item.dart';
 import '../services/download_service.dart';
 import '../services/playback_controller.dart';
 import '../services/storage_service.dart';
 import '../services/youtube_service.dart';
+import '../widgets/channel_tile.dart';
 import '../widgets/playback_bar.dart';
 import '../widgets/track_tile.dart';
+import 'channel_detail_screen.dart';
+
+enum SearchCategory { tracks, channels }
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({
@@ -44,6 +49,8 @@ class _SearchScreenState extends State<SearchScreen> {
       widget.downloadService ?? DownloadService(storageService: _storage);
 
   List<YoutubeSearchItem> _results = [];
+  List<YoutubeChannelItem> _channelResults = [];
+  SearchCategory _selectedCategory = SearchCategory.tracks;
   bool _isLoading = false;
   bool _hasSearched = false;
   String? _inputError;
@@ -93,12 +100,23 @@ class _SearchScreenState extends State<SearchScreen> {
       _inputError = null;
       _searchError = null;
       _results = [];
+      _channelResults = [];
+      _selectedCategory = SearchCategory.tracks;
     });
 
     try {
       final results = await _youtubeService.search(query);
+      List<YoutubeChannelItem> channels = [];
+      try {
+        channels = await _youtubeService.searchChannels(query);
+      } catch (_) {
+        // Channels fallback
+      }
       if (!mounted) return;
-      setState(() => _results = results);
+      setState(() {
+        _results = results;
+        _channelResults = channels;
+      });
     } on TimeoutException {
       if (!mounted) return;
       setState(() {
@@ -198,44 +216,56 @@ class _SearchScreenState extends State<SearchScreen> {
                 ],
               ),
             ),
-            if (_results.isNotEmpty)
-              Padding(
+            if (_hasSearched &&
+                !_isLoading &&
+                (_results.isNotEmpty || _channelResults.isNotEmpty))
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest
-                            .withAlpha(120),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${_results.length} tracks',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                      ),
+                    ChoiceChip(
+                      label: Text('Tracks (${_results.length})'),
+                      selected: _selectedCategory == SearchCategory.tracks,
+                      showCheckmark: false,
+                      onSelected: (selected) {
+                        if (selected) {
+                          setState(() => _selectedCategory = SearchCategory.tracks);
+                        }
+                      },
+                      avatar: const Icon(Icons.music_note, size: 16),
+                      visualDensity: VisualDensity.compact,
                     ),
-                    FilledButton.tonalIcon(
-                      icon: const Icon(Icons.play_arrow, size: 18),
-                      label: const Text('Play All'),
-                      style: FilledButton.styleFrom(
-                        shape: const StadiumBorder(),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: Text('Channels (${_channelResults.length})'),
+                      selected: _selectedCategory == SearchCategory.channels,
+                      showCheckmark: false,
+                      onSelected: (selected) {
+                        if (selected) {
+                          setState(() => _selectedCategory = SearchCategory.channels);
+                        }
+                      },
+                      avatar: const Icon(Icons.person, size: 16),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    if (_selectedCategory == SearchCategory.tracks && _results.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      FilledButton.tonalIcon(
+                        icon: const Icon(Icons.play_arrow, size: 18),
+                        label: const Text('Play All'),
+                        style: FilledButton.styleFrom(
+                          shape: const StadiumBorder(),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 0,
+                          ),
+                          visualDensity: VisualDensity.compact,
                         ),
+                        onPressed: () => _playback.playQueue(_results),
                       ),
-                      onPressed: () => _playback.playQueue(_results),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -269,40 +299,6 @@ class _SearchScreenState extends State<SearchScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Compact prompt card (Space-wise & aesthetic)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant.withAlpha(80),
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.search,
-                    color: Theme.of(context).colorScheme.primary,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Search YouTube to get started.',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w500,
-                          ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
             if (recents.isNotEmpty) ...[
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -344,13 +340,36 @@ class _SearchScreenState extends State<SearchScreen> {
                   );
                 }).toList(),
               ),
+              const SizedBox(height: 32),
             ],
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.headphones_outlined,
+                      size: 48,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Search YouTube to get started.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       );
     }
 
-    if (_results.isEmpty) {
+    if (_results.isEmpty && _channelResults.isEmpty) {
       return const Center(
         child: SingleChildScrollView(
           padding: EdgeInsets.all(24),
@@ -359,18 +378,60 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 100),
-      itemCount: _results.length,
-      itemBuilder: (context, index) {
-        final item = _results[index];
-        return TrackTile(
-          item: item,
-          playback: _playback,
-          storage: _storage,
-          downloadService: _downloadService,
+    if (_selectedCategory == SearchCategory.tracks) {
+      if (_results.isEmpty) {
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text('No tracks found for this search. Try the Channels tab.', textAlign: TextAlign.center),
+          ),
         );
-      },
-    );
+      }
+      return ListView.builder(
+        padding: const EdgeInsets.only(bottom: 100),
+        itemCount: _results.length,
+        itemBuilder: (context, index) {
+          final item = _results[index];
+          return TrackTile(
+            item: item,
+            playback: _playback,
+            storage: _storage,
+            downloadService: _downloadService,
+          );
+        },
+      );
+    } else {
+      if (_channelResults.isEmpty) {
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text('No channels found for this search. Try the Tracks tab.', textAlign: TextAlign.center),
+          ),
+        );
+      }
+      return ListView.builder(
+        padding: const EdgeInsets.only(bottom: 100),
+        itemCount: _channelResults.length,
+        itemBuilder: (context, index) {
+          final channel = _channelResults[index];
+          return ChannelTile(
+            channel: channel,
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => ChannelDetailScreen(
+                    channel: channel,
+                    youtubeService: _youtubeService,
+                    playback: _playback,
+                    storage: _storage,
+                    downloadService: _downloadService,
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      );
+    }
   }
 }
