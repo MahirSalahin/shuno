@@ -49,17 +49,6 @@ class _SearchScreenState extends State<SearchScreen> {
   String? _inputError;
   String? _searchError;
 
-  final List<String> _quickTags = [
-    'White Noise',
-    'Rain Sounds',
-    'Ocean Waves',
-    'Brown Noise',
-    'Audiobook',
-    'Quran',
-    'Islamic Lecture',
-    'Nasheed',
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -197,23 +186,6 @@ class _SearchScreenState extends State<SearchScreen> {
                     onPressed: _isLoading ? null : () => _search(),
                     icon: const Icon(Icons.search),
                     label: const Text('Search'),
-                  ),
-                  const SizedBox(height: 8),
-                  // Quick search chips
-                  SizedBox(
-                    height: 36,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _quickTags.length,
-                      separatorBuilder: (context, index) => const SizedBox(width: 8),
-                      itemBuilder: (context, index) {
-                        final tag = _quickTags[index];
-                        return ActionChip(
-                          label: Text(tag, style: const TextStyle(fontSize: 12)),
-                          onPressed: _isLoading ? null : () => _search(tag),
-                        );
-                      },
-                    ),
                   ),
                 ],
               ),

@@ -120,4 +120,51 @@ void main() {
     expect(controller.isShuffle, isFalse);
     expect(controller.queue.map((e) => e.id).toList(), ['1', '2', '3', '4']);
   });
+
+  test('upNext excludes current track and previous tracks', () async {
+    final items = [testItem('1'), testItem('2'), testItem('3')];
+    await controller.playQueue(items, initialIndex: 1);
+
+    // Current is '2'
+    expect(controller.selected?.id, '2');
+    // upNext must ONLY contain '3', never '2' or '1'
+    expect(controller.upNext.length, 1);
+    expect(controller.upNext.first.id, '3');
+    // previousTracks must ONLY contain '1'
+    expect(controller.previousTracks.length, 1);
+    expect(controller.previousTracks.first.id, '1');
+  });
+
+  test('clearUpNext clears upcoming tracks without altering current or previous tracks', () async {
+    final items = [testItem('1'), testItem('2'), testItem('3'), testItem('4')];
+    await controller.playQueue(items, initialIndex: 1);
+
+    expect(controller.upNext.length, 2);
+    controller.clearUpNext();
+    expect(controller.upNext, isEmpty);
+    expect(controller.selected?.id, '2');
+    expect(controller.previousTracks.length, 1);
+    expect(controller.previousTracks.first.id, '1');
+  });
+
+  test('playItem inserts after current track and maintains upcoming queue order', () async {
+    final items = [testItem('1'), testItem('2')];
+    await controller.playQueue(items, initialIndex: 0);
+
+    // Currently playing '1', upNext has '2'
+    expect(controller.selected?.id, '1');
+    expect(controller.upNext.map((e) => e.id).toList(), ['2']);
+
+    // Play a new track 'new'
+    await controller.playItem(testItem('new'));
+
+    // 'new' is now playing
+    expect(controller.selected?.id, 'new');
+    // '1' is in previousTracks
+    expect(controller.previousTracks.map((e) => e.id).toList(), ['1']);
+    // '2' remains in upNext
+    expect(controller.upNext.map((e) => e.id).toList(), ['2']);
+    // Total queue order: ['1', 'new', '2']
+    expect(controller.queue.map((e) => e.id).toList(), ['1', 'new', '2']);
+  });
 }

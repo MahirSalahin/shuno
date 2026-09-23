@@ -19,19 +19,38 @@ class QueueScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final queue = playback.queue;
-    final currentIndex = playback.currentIndex;
-    final currentItem = playback.selected;
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        playback,
+        storage,
+        ?downloadService,
+      ]),
+      builder: (context, _) {
+        final theme = Theme.of(context);
+        final currentItem = playback.selected;
+        final currentIndex = playback.currentIndex;
+        final upNext = playback.upNext;
+        final previous = playback.previousTracks;
 
-    return Scaffold(
+        return Scaffold(
       appBar: AppBar(
         title: const Text('Playing Queue'),
         actions: [
-          if (queue.isNotEmpty)
+          if (upNext.isNotEmpty)
             TextButton.icon(
-              icon: const Icon(Icons.clear_all),
-              label: const Text('Clear'),
+              icon: const Icon(Icons.clear_all, size: 18),
+              label: const Text('Clear Up Next'),
+              onPressed: () {
+                playback.clearUpNext();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Upcoming queue cleared')),
+                );
+              },
+            )
+          else if (playback.queue.isNotEmpty)
+            TextButton.icon(
+              icon: const Icon(Icons.delete_sweep, size: 18),
+              label: const Text('Clear Queue'),
               onPressed: () {
                 playback.clearQueue();
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -41,7 +60,7 @@ class QueueScreen extends StatelessWidget {
             ),
         ],
       ),
-      body: queue.isEmpty
+      body: currentItem == null && playback.queue.isEmpty
           ? Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -58,7 +77,7 @@ class QueueScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Search for music and add songs to the queue',
+                    'Search for music and tap play or add to queue',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -69,16 +88,31 @@ class QueueScreen extends StatelessWidget {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // 1. NOW PLAYING SECTION (Only the current track)
                 if (currentItem != null) ...[
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                    child: Text(
-                      'NOW PLAYING',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        letterSpacing: 1.2,
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'NOW PLAYING',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            letterSpacing: 1.2,
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (playback.loopMode != PlaybackLoopMode.off)
+                          Text(
+                            playback.loopMode == PlaybackLoopMode.one
+                                ? 'Repeat One'
+                                : 'Repeat All',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   TrackTile(
@@ -87,109 +121,192 @@ class QueueScreen extends StatelessWidget {
                     storage: storage,
                     downloadService: downloadService,
                   ),
-                  const Divider(height: 24),
+                  const Divider(height: 20),
                 ],
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'UP NEXT (${queue.length})',
+
+                // 2. PREVIOUSLY PLAYED (Collapsible, only if there are prior tracks)
+                if (previous.isNotEmpty)
+                  Theme(
+                    data: theme.copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      dense: true,
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+                      leading: const Icon(Icons.history, size: 18),
+                      title: Text(
+                        'Previously Played (${previous.length})',
                         style: theme.textTheme.labelMedium?.copyWith(
-                          letterSpacing: 1.2,
                           color: theme.colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      if (playback.loopMode != PlaybackLoopMode.off)
-                        Text(
-                          playback.loopMode == PlaybackLoopMode.one
-                              ? 'Repeat One'
-                              : 'Repeat All',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.primary,
+                      children: [
+                        for (final prev in previous)
+                          ListTile(
+                            dense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                            ),
+                            leading: ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: prev.thumbnailUrl.isNotEmpty
+                                  ? Image.network(
+                                      prev.thumbnailUrl,
+                                      width: 44,
+                                      height: 32,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) =>
+                                              const Icon(Icons.music_note),
+                                    )
+                                  : const Icon(Icons.music_note),
+                            ),
+                            title: Text(
+                              prev.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            subtitle: Text(
+                              prev.channelName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.replay, size: 18),
+                              tooltip: 'Play again',
+                              onPressed: () => playback.playItem(prev),
+                            ),
+                            onTap: () => playback.playItem(prev),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
+                  ),
+
+                // 3. UP NEXT SECTION (Strictly upcoming tracks)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: Text(
+                    'UP NEXT (${upNext.length})',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      letterSpacing: 1.2,
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-                Expanded(
-                  child: ReorderableListView.builder(
-                    padding: const EdgeInsets.only(bottom: 100),
-                    itemCount: queue.length,
-                    onReorder: playback.reorder,
-                    itemBuilder: (context, index) {
-                      final item = queue[index];
-                      final isCurrent = index == currentIndex;
 
-                      return Dismissible(
-                        key: ValueKey('queue_${item.id}_$index'),
-                        direction: DismissDirection.endToStart,
-                        background: Container(
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.only(right: 20),
-                          color: theme.colorScheme.error,
-                          child: const Icon(Icons.delete, color: Colors.white),
-                        ),
-                        onDismissed: (_) => playback.removeAt(index),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                          ),
-                          leading: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ReorderableDragStartListener(
-                                index: index,
-                                child: const Icon(Icons.drag_handle),
-                              ),
-                              const SizedBox(width: 8),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(4),
-                                child: item.thumbnailUrl.isNotEmpty
-                                    ? Image.network(
-                                        item.thumbnailUrl,
-                                        width: 44,
-                                        height: 32,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) =>
-                                            const Icon(Icons.music_note),
-                                      )
-                                    : const Icon(Icons.music_note),
-                              ),
-                            ],
-                          ),
-                          title: Text(
-                            item.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: isCurrent
-                                  ? theme.colorScheme.primary
-                                  : null,
-                              fontWeight: isCurrent
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
+                Expanded(
+                  child: upNext.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.playlist_play,
+                                  size: 48,
+                                  color: theme.colorScheme.outline,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'No upcoming tracks',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Tracks added with "Play Next" or "Add to Queue" will appear here.',
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.outline,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          subtitle: Text(
-                            item.channelName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.close, size: 18),
-                            tooltip: 'Remove from queue',
-                            onPressed: () => playback.removeAt(index),
-                          ),
-                          onTap: () => playback.playItem(item),
+                        )
+                      : ReorderableListView.builder(
+                          padding: const EdgeInsets.only(bottom: 100),
+                          itemCount: upNext.length,
+                          onReorder: (oldIndex, newIndex) {
+                            final actualOld = currentIndex + 1 + oldIndex;
+                            final actualNew = currentIndex + 1 + newIndex;
+                            playback.reorder(actualOld, actualNew);
+                          },
+                          itemBuilder: (context, index) {
+                            final item = upNext[index];
+                            final actualIndex = currentIndex + 1 + index;
+
+                            return Dismissible(
+                              key: ValueKey('upnext_${item.id}_$actualIndex'),
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 20),
+                                color: theme.colorScheme.error,
+                                child: const Icon(Icons.delete,
+                                    color: Colors.white),
+                              ),
+                              onDismissed: (_) =>
+                                  playback.removeAt(actualIndex),
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                leading: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ReorderableDragStartListener(
+                                      index: index,
+                                      child: const Icon(Icons.drag_handle),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: item.thumbnailUrl.isNotEmpty
+                                          ? Image.network(
+                                              item.thumbnailUrl,
+                                              width: 44,
+                                              height: 32,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (context, error,
+                                                      stackTrace) =>
+                                                  const Icon(Icons.music_note),
+                                            )
+                                          : const Icon(Icons.music_note),
+                                    ),
+                                  ],
+                                ),
+                                title: Text(
+                                  item.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: Text(
+                                  item.channelName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.close, size: 18),
+                                  tooltip: 'Remove from queue',
+                                  onPressed: () =>
+                                      playback.removeAt(actualIndex),
+                                ),
+                                onTap: () => playback.playItem(item),
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
                 ),
               ],
             ),
+        );
+      },
     );
   }
 }

@@ -185,15 +185,40 @@ class PlaybackController extends ChangeNotifier {
     return player;
   }
 
+  List<YoutubeSearchItem> get upNext {
+    if (_currentIndex < 0 || _currentIndex + 1 >= _queue.length) {
+      return const [];
+    }
+    return List.unmodifiable(_queue.sublist(_currentIndex + 1));
+  }
+
+  List<YoutubeSearchItem> get previousTracks {
+    if (_currentIndex <= 0) {
+      return const [];
+    }
+    return List.unmodifiable(_queue.sublist(0, _currentIndex));
+  }
+
+  void clearUpNext() {
+    if (_queue.isEmpty || _currentIndex < 0) return;
+    if (_currentIndex + 1 < _queue.length) {
+      _queue.removeRange(_currentIndex + 1, _queue.length);
+      notifyListeners();
+    }
+  }
+
   Future<void> playItem(YoutubeSearchItem item, {Duration? initialPosition}) async {
     if (_disposed || _loading) return;
-    // If item is already in queue, jump to it. Otherwise, put it in queue.
+    // If item is already in queue, jump to it. Otherwise, insert after current track.
     final existingIndex = _queue.indexWhere((e) => e.id == item.id);
     if (existingIndex >= 0) {
       _currentIndex = existingIndex;
-    } else {
+    } else if (_queue.isEmpty || _currentIndex < 0) {
       _queue.add(item);
-      _currentIndex = _queue.length - 1;
+      _currentIndex = 0;
+    } else {
+      _currentIndex++;
+      _queue.insert(_currentIndex, item);
     }
     await _loadAndPlay(item, initialPosition: initialPosition);
   }
@@ -254,7 +279,8 @@ class PlaybackController extends ChangeNotifier {
     if (oldIndex < 0 || oldIndex >= _queue.length) return;
     if (newIndex > oldIndex) newIndex--;
     final item = _queue.removeAt(oldIndex);
-    _queue.insert(newIndex, item);
+    final clampedNewIndex = newIndex.clamp(0, _queue.length);
+    _queue.insert(clampedNewIndex, item);
     if (_selected != null) {
       _currentIndex = _queue.indexOf(_selected!);
     }

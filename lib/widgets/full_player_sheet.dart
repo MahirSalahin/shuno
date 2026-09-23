@@ -222,12 +222,13 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
     );
 
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
             // Drag Handle
             Center(
               child: Container(
@@ -543,81 +544,115 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
             ),
             const SizedBox(height: 12),
 
-            // Bottom Actions: Download, Sleep Timer status, and Queue
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                // Download Button
-                if (isDownloading)
-                  TextButton.icon(
-                    icon: const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+            // Active Sleep Timer indicator
+            if (playback.hasSleepTimer)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Center(
+                  child: ActionChip(
+                    avatar: Icon(
+                      Icons.bedtime,
+                      size: 15,
+                      color: theme.colorScheme.primary,
                     ),
                     label: Text(
-                      'Downloading ${((downloadService?.getProgress(item.id) ?? 0) * 100).toInt()}%',
+                      'Sleep: ${playback.sleepTimerRemainingFormatted}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    onPressed: () {
-                      downloadService?.cancelDownload(item.id);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Download cancelled')),
-                      );
-                    },
-                  )
-                else if (isDownloaded)
-                  TextButton.icon(
-                    icon: const Icon(Icons.offline_pin, color: Colors.green),
-                    label: const Text('Downloaded'),
-                    onPressed: () {
-                      downloadService?.deleteDownload(item.id);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Download deleted')),
-                      );
-                    },
-                  )
-                else
-                  TextButton.icon(
-                    icon: const Icon(Icons.download),
-                    label: const Text('Download'),
-                    onPressed: () {
-                      if (downloadService != null) {
-                        downloadService.downloadTrack(item);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Downloading "${item.title}"...'),
-                            duration: const Duration(seconds: 3),
-                          ),
-                        );
-                      }
-                    },
-                  ),
-
-                // Sleep Timer status indicator
-                if (playback.hasSleepTimer)
-                  ActionChip(
-                    avatar: const Icon(Icons.bedtime, size: 16),
-                    label: Text(
-                      playback.sleepTimerRemainingFormatted ?? 'Timer',
-                      style: const TextStyle(fontSize: 12),
-                    ),
+                    visualDensity: VisualDensity.compact,
                     onPressed: () => _showSleepTimerPicker(context),
                   ),
+                ),
+              ),
+
+            // Bottom Actions: Download and Queue
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Download Button
+                Flexible(
+                  child: isDownloading
+                      ? TextButton.icon(
+                          icon: const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          label: Text(
+                            'Downloading ${((downloadService?.getProgress(item.id) ?? 0) * 100).toInt()}%',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          onPressed: () {
+                            downloadService?.cancelDownload(item.id);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Download cancelled')),
+                            );
+                          },
+                        )
+                      : isDownloaded
+                      ? TextButton.icon(
+                          icon: const Icon(Icons.offline_pin, color: Colors.green),
+                          label: const Text(
+                            'Downloaded',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          onPressed: () {
+                            downloadService?.deleteDownload(item.id);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Download deleted')),
+                            );
+                          },
+                        )
+                      : TextButton.icon(
+                          icon: const Icon(Icons.download),
+                          label: const Text(
+                            'Download',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          onPressed: () {
+                            if (downloadService != null) {
+                              downloadService.downloadTrack(item);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Downloading "${item.title}"...'),
+                                  duration: const Duration(seconds: 3),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                ),
+                const SizedBox(width: 8),
 
                 // Queue Shortcut
-                TextButton.icon(
-                  icon: const Icon(Icons.queue_music),
-                  label: Text('Queue (${playback.queue.length})'),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    widget.onOpenQueue?.call();
-                  },
+                Flexible(
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.queue_music),
+                    label: Text(
+                      playback.upNext.isNotEmpty
+                          ? 'Queue (${playback.upNext.length})'
+                          : 'Queue',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      widget.onOpenQueue?.call();
+                    },
+                  ),
                 ),
               ],
             ),
           ],
         ),
       ),
+    ),
     );
   }
 }

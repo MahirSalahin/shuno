@@ -179,7 +179,7 @@ class SettingsScreen extends StatelessWidget {
           ),
           ListTile(
             title: const Text('Shuno'),
-            subtitle: const Text('Personal YouTube Audio Experiment • v0.1.0'),
+            subtitle: const Text('YouTube Audio Client • v0.1.0'),
             leading: ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: Image.asset(
@@ -189,11 +189,6 @@ class SettingsScreen extends StatelessWidget {
                 fit: BoxFit.cover,
               ),
             ),
-          ),
-          const ListTile(
-            title: Text('Built with'),
-            subtitle: Text('Flutter • just_audio • youtube_explode_dart • audio_service'),
-            leading: Icon(Icons.code),
           ),
         ],
       ),
