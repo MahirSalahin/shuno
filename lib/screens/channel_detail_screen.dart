@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../models/youtube_channel_item.dart';
+import '../models/youtube_playlist_item.dart';
 import '../models/youtube_search_item.dart';
 import '../services/download_service.dart';
 import '../services/playback_controller.dart';
 import '../services/storage_service.dart';
 import '../services/youtube_service.dart';
+import '../widgets/channel_playlist_tile.dart';
 import '../widgets/playback_bar.dart';
 import '../widgets/track_tile.dart';
+import 'youtube_playlist_detail_screen.dart';
+
+enum ChannelTab { tracks, playlists }
 
 class ChannelDetailScreen extends StatefulWidget {
   const ChannelDetailScreen({
@@ -31,8 +36,19 @@ class ChannelDetailScreen extends StatefulWidget {
 
 class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
   late YoutubeChannelItem _channel;
+  final _searchController = TextEditingController();
+
   List<YoutubeSearchItem> _videos = [];
+  List<YoutubePlaylistItem> _playlists = [];
+  ChannelTab _currentTab = ChannelTab.tracks;
+
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMoreUploads = false;
+  dynamic _uploadContinuation;
+
+  List<YoutubeSearchItem>? _inChannelSearchResults;
+  bool _isSearchingInChannel = false;
   String? _error;
 
   @override
@@ -54,6 +70,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
     widget.playback.removeListener(_onUpdate);
     widget.storage.removeListener(_onUpdate);
     widget.downloadService?.removeListener(_onUpdate);
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -64,22 +81,57 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
     });
 
     try {
-      final videosFuture = widget.youtubeService.getChannelVideos(
-        _channel.id,
-        channelName: _channel.title,
-      );
+      ChannelUploadsPage pageResult;
+      try {
+        pageResult = await widget.youtubeService.getChannelUploadsPage(
+          _channel.id,
+          channelName: _channel.title,
+        );
+      } catch (_) {
+        final videos = await widget.youtubeService.getChannelVideos(
+          _channel.id,
+          channelName: _channel.title,
+        );
+        pageResult = ChannelUploadsPage(items: videos, hasMore: false);
+      }
+
+      if (pageResult.items.isEmpty) {
+        final videos = await widget.youtubeService.getChannelVideos(
+          _channel.id,
+          channelName: _channel.title,
+        );
+        if (videos.isNotEmpty) {
+          pageResult = ChannelUploadsPage(items: videos, hasMore: false);
+        }
+      }
+
       final detailsFuture = _channel.subscriberCount == null
           ? widget.youtubeService.getChannel(_channel.id)
           : Future.value(null);
 
-      final results = await Future.wait([videosFuture, detailsFuture]);
+      final playlistsFuture = () async {
+        try {
+          return await widget.youtubeService.getChannelPlaylists(
+            _channel.title,
+            channelId: _channel.id,
+          );
+        } catch (_) {
+          return <YoutubePlaylistItem>[];
+        }
+      }();
+
+      final results = await Future.wait([detailsFuture, playlistsFuture]);
       if (!mounted) return;
 
-      final videos = results[0] as List<YoutubeSearchItem>;
-      final details = results[1] as YoutubeChannelItem?;
+      final details = results[0] as YoutubeChannelItem?;
+      final playlists = results[1] as List<YoutubePlaylistItem>;
 
       setState(() {
-        _videos = videos;
+        _videos = pageResult.items;
+        _hasMoreUploads = pageResult.hasMore;
+        _uploadContinuation = pageResult.continuation;
+        _playlists = playlists;
+
         if (details != null) {
           _channel = YoutubeChannelItem(
             id: _channel.id,
@@ -103,11 +155,101 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
     }
   }
 
+  Future<void> _loadMoreUploads() async {
+    if (_isLoadingMore || !_hasMoreUploads) return;
+    setState(() => _isLoadingMore = true);
+
+    try {
+      final nextPage = await widget.youtubeService.getChannelUploadsPage(
+        _channel.id,
+        channelName: _channel.title,
+        continuation: _uploadContinuation,
+      );
+      if (!mounted) return;
+      setState(() {
+        _videos.addAll(nextPage.items);
+        _hasMoreUploads = nextPage.hasMore;
+        _uploadContinuation = nextPage.continuation;
+        _isLoadingMore = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingMore = false);
+    }
+  }
+
+  Future<void> _searchInChannel(String query) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) {
+      setState(() {
+        _inChannelSearchResults = null;
+        _isSearchingInChannel = false;
+      });
+      return;
+    }
+
+    setState(() => _isSearchingInChannel = true);
+
+    try {
+      final deepResults = await widget.youtubeService.searchChannelTracks(
+        _channel.id,
+        trimmed,
+        channelName: _channel.title,
+      );
+      if (!mounted) return;
+
+      // Filter locally loaded tracks as well
+      final localMatches = _videos
+          .where(
+            (v) =>
+                v.title.toLowerCase().contains(trimmed.toLowerCase()) ||
+                v.channelName.toLowerCase().contains(trimmed.toLowerCase()),
+          )
+          .toList();
+
+      // Combine and deduplicate
+      final seenIds = <String>{};
+      final combined = <YoutubeSearchItem>[];
+      for (final item in [...localMatches, ...deepResults]) {
+        if (seenIds.add(item.id)) combined.add(item);
+      }
+
+      setState(() {
+        _inChannelSearchResults = combined;
+        _isSearchingInChannel = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        // Fallback to local filtering
+        final localMatches = _videos
+            .where(
+              (v) =>
+                  v.title.toLowerCase().contains(trimmed.toLowerCase()) ||
+                  v.channelName.toLowerCase().contains(trimmed.toLowerCase()),
+            )
+            .toList();
+        setState(() {
+          _inChannelSearchResults = localMatches;
+          _isSearchingInChannel = false;
+        });
+      }
+    }
+  }
+
+  void _clearInChannelSearch() {
+    _searchController.clear();
+    setState(() {
+      _inChannelSearchResults = null;
+      _isSearchingInChannel = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final subs = _channel.formattedSubscribers;
     final videoCount = _channel.formattedVideoCount;
+
+    final displayedVideos = _inChannelSearchResults ?? _videos;
 
     return Scaffold(
       appBar: AppBar(
@@ -129,7 +271,9 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
           : null,
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(semanticsLabel: 'Loading channel tracks'),
+              child: CircularProgressIndicator(
+                semanticsLabel: 'Loading channel tracks',
+              ),
             )
           : _error != null
               ? Center(
@@ -159,7 +303,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                     // Channel Header
                     SliverToBoxAdapter(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                         child: Column(
                           children: [
                             // Circular Avatar
@@ -227,37 +371,63 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                                   FilledButton.icon(
                                     icon: const Icon(Icons.play_arrow, size: 20),
                                     label: const Text('Play All'),
-                                    onPressed: () => widget.playback.playQueue(_videos),
+                                    onPressed: () => widget.playback.playQueue(
+                                      displayedVideos.isNotEmpty
+                                          ? displayedVideos
+                                          : _videos,
+                                    ),
                                   ),
                                   const SizedBox(width: 10),
                                   OutlinedButton.icon(
                                     icon: const Icon(Icons.shuffle, size: 18),
                                     label: const Text('Shuffle'),
                                     onPressed: () {
-                                      final shuffled = List<YoutubeSearchItem>.from(_videos)..shuffle();
+                                      final pool = displayedVideos.isNotEmpty
+                                          ? displayedVideos
+                                          : _videos;
+                                      final shuffled =
+                                          List<YoutubeSearchItem>.from(pool)
+                                            ..shuffle();
                                       widget.playback.playQueue(shuffled);
                                     },
                                   ),
                                 ],
                               ),
-                          ],
-                        ),
-                      ),
-                    ),
+                            const SizedBox(height: 16),
 
-                    // Section Title
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'TRACKS (${_videos.length})',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                letterSpacing: 1.2,
-                                color: theme.colorScheme.onSurfaceVariant,
-                                fontWeight: FontWeight.bold,
+                            // Channel Exploration Tabs: Tracks & Playlists
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              physics: const BouncingScrollPhysics(),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  ChoiceChip(
+                                    label: Text('Tracks (${_videos.length})'),
+                                    selected: _currentTab == ChannelTab.tracks,
+                                    showCheckmark: false,
+                                    avatar: const Icon(Icons.music_note, size: 16),
+                                    visualDensity: VisualDensity.compact,
+                                    onSelected: (selected) {
+                                      if (selected) {
+                                        setState(() => _currentTab = ChannelTab.tracks);
+                                      }
+                                    },
+                                  ),
+                                  const SizedBox(width: 8),
+                                  ChoiceChip(
+                                    label: Text('Playlists (${_playlists.length})'),
+                                    selected: _currentTab == ChannelTab.playlists,
+                                    showCheckmark: false,
+                                    avatar: const Icon(Icons.playlist_play, size: 18),
+                                    visualDensity: VisualDensity.compact,
+                                    onSelected: (selected) {
+                                      if (selected) {
+                                        setState(() => _currentTab = ChannelTab.playlists);
+                                      }
+                                    },
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -265,21 +435,102 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                       ),
                     ),
 
-                    // Tracks List
-                    if (_videos.isEmpty)
-                      const SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: Center(
-                          child: Text('No tracks available from this channel.'),
+                    // TRACKS TAB VIEW
+                    if (_currentTab == ChannelTab.tracks) ...[
+                      // In-Channel Search Input
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: TextField(
+                            controller: _searchController,
+                            textInputAction: TextInputAction.search,
+                            onSubmitted: _searchInChannel,
+                            decoration: InputDecoration(
+                              hintText: 'Search in ${_channel.title}…',
+                              prefixIcon: const Icon(Icons.search, size: 20),
+                              suffixIcon: _searchController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear, size: 18),
+                                      onPressed: _clearInChannelSearch,
+                                    )
+                                  : null,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide.none,
+                              ),
+                              filled: true,
+                              fillColor: theme.colorScheme.surfaceContainerHighest.withAlpha(120),
+                            ),
+                          ),
                         ),
-                      )
-                    else
-                      SliverPadding(
-                        padding: const EdgeInsets.only(bottom: 100),
-                        sliver: SliverList(
+                      ),
+
+                      // In-Channel Searching Indicator
+                      if (_isSearchingInChannel)
+                        const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Center(
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      // Search Status Header if searching
+                      if (_inChannelSearchResults != null)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'SEARCH RESULTS (${displayedVideos.length})',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    letterSpacing: 1.1,
+                                    color: theme.colorScheme.primary,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: _clearInChannelSearch,
+                                  child: const Text('Show All'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      // Tracks List
+                      if (displayedVideos.isEmpty)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Text(
+                                _inChannelSearchResults != null
+                                    ? 'No tracks matching "${_searchController.text}".'
+                                    : 'No tracks available from this channel.',
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        )
+                      else ...[
+                        SliverList(
                           delegate: SliverChildBuilderDelegate(
                             (context, index) {
-                              final item = _videos[index];
+                              final item = displayedVideos[index];
                               return TrackTile(
                                 item: item,
                                 playback: widget.playback,
@@ -287,10 +538,95 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                                 downloadService: widget.downloadService,
                               );
                             },
-                            childCount: _videos.length,
+                            childCount: displayedVideos.length,
                           ),
                         ),
-                      ),
+
+                        // Load More / Pagination Button
+                        if (_inChannelSearchResults == null && _hasMoreUploads)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 32,
+                                vertical: 16,
+                              ),
+                              child: Center(
+                                child: _isLoadingMore
+                                    ? const SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : FilledButton.tonalIcon(
+                                        icon: const Icon(
+                                          Icons.expand_more,
+                                          size: 18,
+                                        ),
+                                        label: const Text('Load More Tracks'),
+                                        onPressed: _loadMoreUploads,
+                                      ),
+                              ),
+                            ),
+                          ),
+
+                        const SliverToBoxAdapter(
+                          child: SizedBox(height: 100),
+                        ),
+                      ],
+                    ],
+
+                    // PLAYLISTS TAB VIEW
+                    if (_currentTab == ChannelTab.playlists) ...[
+                      if (_playlists.isEmpty)
+                        const SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(24),
+                              child: Text(
+                                'No playlists found for this channel.',
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        )
+                      else ...[
+                        SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              final playlist = _playlists[index];
+                              return ChannelPlaylistTile(
+                                playlist: playlist,
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          YoutubePlaylistDetailScreen(
+                                        playlist: playlist,
+                                        youtubeService: widget.youtubeService,
+                                        playback: widget.playback,
+                                        storage: widget.storage,
+                                        downloadService:
+                                            widget.downloadService ??
+                                                DownloadService(
+                                                  storageService: widget.storage,
+                                                ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                            childCount: _playlists.length,
+                          ),
+                        ),
+                        const SliverToBoxAdapter(
+                          child: SizedBox(height: 100),
+                        ),
+                      ],
+                    ],
                   ],
                 ),
     );

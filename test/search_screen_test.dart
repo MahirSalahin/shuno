@@ -13,11 +13,19 @@ import 'helpers/fake_audio_player.dart';
 import 'package:shuno/models/youtube_channel_item.dart';
 import 'package:shuno/screens/channel_detail_screen.dart';
 
+import 'package:shuno/models/youtube_playlist_item.dart';
+import 'package:shuno/screens/youtube_playlist_detail_screen.dart';
+import 'package:shuno/widgets/track_tile.dart';
+
 class FakeYoutubeService extends YoutubeService {
   final queries = <String>[];
   Completer<List<YoutubeSearchItem>> response = Completer();
   List<YoutubeChannelItem> channelsToReturn = [];
   List<YoutubeSearchItem> channelVideosToReturn = [];
+  List<YoutubePlaylistItem> channelPlaylistsToReturn = [];
+  List<YoutubeSearchItem> playlistTracksToReturn = [];
+  List<YoutubeSearchItem> inChannelSearchToReturn = [];
+  bool hasMoreUploads = false;
 
   @override
   Future<Uri> resolveAudioUrl(String videoId, {bool highQuality = true}) async =>
@@ -39,6 +47,40 @@ class FakeYoutubeService extends YoutubeService {
     String? channelName,
     int limit = 30,
   }) async => channelVideosToReturn;
+
+  @override
+  Future<ChannelUploadsPage> getChannelUploadsPage(
+    String channelId, {
+    String? channelName,
+    dynamic continuation,
+  }) async =>
+      ChannelUploadsPage(
+        items: channelVideosToReturn,
+        hasMore: hasMoreUploads,
+        continuation: hasMoreUploads ? 'next' : null,
+      );
+
+  @override
+  Future<List<YoutubePlaylistItem>> getChannelPlaylists(
+    String channelName, {
+    String? channelId,
+  }) async =>
+      channelPlaylistsToReturn;
+
+  @override
+  Future<List<YoutubeSearchItem>> getPlaylistTracks(
+    String playlistId, {
+    int limit = 50,
+  }) async =>
+      playlistTracksToReturn;
+
+  @override
+  Future<List<YoutubeSearchItem>> searchChannelTracks(
+    String channelId,
+    String query, {
+    String? channelName,
+  }) async =>
+      inChannelSearchToReturn;
 }
 
 const sample = YoutubeSearchItem(
@@ -222,15 +264,15 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify filter chips are present
-    expect(find.text('Tracks (1)'), findsOneWidget);
-    expect(find.text('Channels (1)'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Tracks'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Channels'), findsOneWidget);
 
     // Initial tab is Tracks: sample track is visible
     expect(find.text('Example song'), findsOneWidget);
     expect(find.text('Coldplay Official'), findsNothing);
 
     // Switch to Channels tab
-    await tester.tap(find.text('Channels (1)'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Channels'));
     await tester.pumpAndSettle();
 
     // Now channel is visible, track is not
@@ -267,7 +309,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Switch to Channels
-    await tester.tap(find.text('Channels (1)'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Channels'));
     await tester.pumpAndSettle();
 
     // Tap on channel tile
@@ -281,7 +323,7 @@ void main() {
     expect(find.text('Play All'), findsOneWidget);
   });
 
-  testWidgets('filter chips and Play All do not overflow on narrow screens', (
+  testWidgets('filter chips do not overflow on narrow screens', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(320, 640);
@@ -302,9 +344,269 @@ void main() {
     service.response.complete([sample]);
     await tester.pumpAndSettle();
 
-    expect(find.text('Tracks (1)'), findsOneWidget);
-    expect(find.text('Channels (1)'), findsOneWidget);
-    expect(find.text('Play All'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Tracks'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Channels'), findsOneWidget);
+    expect(find.text('Play All'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('channel exploration allows searching tracks within a channel', (
+    tester,
+  ) async {
+    final service = FakeYoutubeService();
+    service.channelsToReturn = [
+      const YoutubeChannelItem(
+        id: 'c-1',
+        title: 'Coldplay',
+        thumbnailUrl: '',
+      ),
+    ];
+    service.channelVideosToReturn = [
+      const YoutubeSearchItem(
+        id: 't-1',
+        title: 'Yellow',
+        channelName: 'Coldplay',
+        thumbnailUrl: '',
+      ),
+      const YoutubeSearchItem(
+        id: 't-2',
+        title: 'Fix You',
+        channelName: 'Coldplay',
+        thumbnailUrl: '',
+      ),
+    ];
+    service.inChannelSearchToReturn = [
+      const YoutubeSearchItem(
+        id: 't-3',
+        title: 'Yellow (Live)',
+        channelName: 'Coldplay',
+        thumbnailUrl: '',
+      ),
+    ];
+
+    await openSearch(tester, service);
+    await submit(tester, 'coldplay');
+    service.response.complete([sample]);
+    await tester.pumpAndSettle();
+
+    // Switch to Channels
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Channels'));
+    await tester.pumpAndSettle();
+
+    // Tap on Coldplay channel
+    await tester.tap(find.text('Coldplay'));
+    await tester.pumpAndSettle();
+
+    // Both tracks initially visible
+    expect(find.text('Yellow'), findsOneWidget);
+    expect(find.text('Fix You'), findsOneWidget);
+
+    // Search in channel
+    final inChannelInput = find.widgetWithText(TextField, 'Search in Coldplay…');
+    expect(inChannelInput, findsOneWidget);
+
+    await tester.enterText(inChannelInput, 'Yellow');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+
+    // Yellow is visible, Fix You is not
+    expect(find.widgetWithText(TrackTile, 'Yellow'), findsOneWidget);
+    expect(find.widgetWithText(TrackTile, 'Fix You'), findsNothing);
+    expect(find.widgetWithText(TrackTile, 'Yellow (Live)'), findsOneWidget);
+
+    // Tap Show All to clear search
+    await tester.tap(find.text('Show All'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(TrackTile, 'Yellow'), findsOneWidget);
+    expect(find.widgetWithText(TrackTile, 'Fix You'), findsOneWidget);
+  });
+
+  testWidgets('channel exploration explores channel playlists and views playlist tracks', (
+    tester,
+  ) async {
+    final service = FakeYoutubeService();
+    service.channelsToReturn = [
+      const YoutubeChannelItem(
+        id: 'c-1',
+        title: 'Coldplay',
+        thumbnailUrl: '',
+      ),
+    ];
+    service.channelVideosToReturn = [
+      const YoutubeSearchItem(
+        id: 't-1',
+        title: 'Yellow',
+        channelName: 'Coldplay',
+        thumbnailUrl: '',
+      ),
+    ];
+    service.channelPlaylistsToReturn = [
+      const YoutubePlaylistItem(
+        id: 'pl-1',
+        title: 'Parachutes Album',
+        thumbnailUrl: '',
+        videoCount: 10,
+        author: 'Coldplay',
+      ),
+    ];
+    service.playlistTracksToReturn = [
+      const YoutubeSearchItem(
+        id: 'pl-t1',
+        title: 'Don\'t Panic',
+        channelName: 'Coldplay',
+        thumbnailUrl: '',
+      ),
+      const YoutubeSearchItem(
+        id: 'pl-t2',
+        title: 'Shiver',
+        channelName: 'Coldplay',
+        thumbnailUrl: '',
+      ),
+    ];
+
+    await openSearch(tester, service);
+    await submit(tester, 'coldplay');
+    service.response.complete([sample]);
+    await tester.pumpAndSettle();
+
+    // Switch to Channels
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Channels'));
+    await tester.pumpAndSettle();
+
+    // Tap on Coldplay channel
+    await tester.tap(find.text('Coldplay'));
+    await tester.pumpAndSettle();
+
+    // Check Playlists tab chip is visible
+    expect(find.text('Playlists (1)'), findsOneWidget);
+
+    // Switch to Playlists tab
+    await tester.tap(find.text('Playlists (1)'));
+    await tester.pumpAndSettle();
+
+    // Verify playlist card
+    expect(find.text('Parachutes Album'), findsOneWidget);
+    expect(find.text('10 tracks'), findsOneWidget);
+
+    // Tap on playlist card to open YoutubePlaylistDetailScreen
+    await tester.tap(find.text('Parachutes Album'));
+    await tester.pumpAndSettle();
+
+    // Verify playlist detail screen is opened
+    expect(find.byType(YoutubePlaylistDetailScreen), findsOneWidget);
+    expect(find.text('Don\'t Panic'), findsOneWidget);
+    expect(find.text('Shiver'), findsOneWidget);
+  });
+
+  testWidgets('channel exploration shows load more tracks button when hasMoreUploads is true', (
+    tester,
+  ) async {
+    final service = FakeYoutubeService();
+    service.channelsToReturn = [
+      const YoutubeChannelItem(
+        id: 'c-1',
+        title: 'Coldplay',
+        thumbnailUrl: '',
+      ),
+    ];
+    service.hasMoreUploads = true;
+    service.channelVideosToReturn = [
+      const YoutubeSearchItem(
+        id: 't-1',
+        title: 'Yellow',
+        channelName: 'Coldplay',
+        thumbnailUrl: '',
+      ),
+    ];
+
+    await openSearch(tester, service);
+    await submit(tester, 'coldplay');
+    service.response.complete([sample]);
+    await tester.pumpAndSettle();
+
+    // Switch to Channels
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Channels'));
+    await tester.pumpAndSettle();
+
+    // Tap on Coldplay channel
+    await tester.tap(find.text('Coldplay'));
+    await tester.pumpAndSettle();
+
+    // Verify Load More Tracks button is visible
+    expect(find.text('Load More Tracks'), findsOneWidget);
+  });
+
+  testWidgets('channel exploration strictly passes channel id to scoped services', (
+    tester,
+  ) async {
+    final service = FakeYoutubeService();
+    service.channelsToReturn = [
+      const YoutubeChannelItem(
+        id: 'UC-ANAS-12345',
+        title: 'Anas Lahebouk',
+        thumbnailUrl: '',
+      ),
+    ];
+    service.channelVideosToReturn = [
+      const YoutubeSearchItem(
+        id: 'anas-t1',
+        title: 'Surah Al-Mulk',
+        channelName: 'Anas Lahebouk',
+        thumbnailUrl: '',
+      ),
+    ];
+    service.channelPlaylistsToReturn = [
+      const YoutubePlaylistItem(
+        id: 'PL-ANAS-PL1',
+        title: 'Official Full Quran',
+        thumbnailUrl: '',
+        videoCount: 114,
+        author: 'Anas Lahebouk',
+      ),
+    ];
+    service.inChannelSearchToReturn = [
+      const YoutubeSearchItem(
+        id: 'anas-t2',
+        title: 'Surah Rahman',
+        channelName: 'Anas Lahebouk',
+        thumbnailUrl: '',
+      ),
+    ];
+
+    await openSearch(tester, service);
+    await submit(tester, 'anas');
+    service.response.complete([sample]);
+    await tester.pumpAndSettle();
+
+    // Switch to Channels
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Channels'));
+    await tester.pumpAndSettle();
+
+    // Tap on Anas Lahebouk channel
+    await tester.tap(find.text('Anas Lahebouk'));
+    await tester.pumpAndSettle();
+
+    // Verify channel tracks display only Anas Lahebouk's track
+    expect(find.text('Surah Al-Mulk'), findsOneWidget);
+
+    // Switch to Playlists tab
+    await tester.tap(find.text('Playlists (1)'));
+    await tester.pumpAndSettle();
+
+    // Verify official playlist
+    expect(find.text('Official Full Quran'), findsOneWidget);
+
+    // Switch back to Tracks and search
+    await tester.tap(find.text('Tracks (1)'));
+    await tester.pumpAndSettle();
+
+    final searchField = find.widgetWithText(TextField, 'Search in Anas Lahebouk…');
+    await tester.enterText(searchField, 'Rahman');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Surah Rahman'), findsOneWidget);
+  });
 }
+

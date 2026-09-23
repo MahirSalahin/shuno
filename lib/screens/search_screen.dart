@@ -226,7 +226,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 child: Row(
                   children: [
                     ChoiceChip(
-                      label: Text('Tracks (${_results.length})'),
+                      label: const Text('Tracks'),
                       selected: _selectedCategory == SearchCategory.tracks,
                       showCheckmark: false,
                       onSelected: (selected) {
@@ -239,7 +239,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     ),
                     const SizedBox(width: 8),
                     ChoiceChip(
-                      label: Text('Channels (${_channelResults.length})'),
+                      label: const Text('Channels'),
                       selected: _selectedCategory == SearchCategory.channels,
                       showCheckmark: false,
                       onSelected: (selected) {
@@ -250,22 +250,6 @@ class _SearchScreenState extends State<SearchScreen> {
                       avatar: const Icon(Icons.person, size: 16),
                       visualDensity: VisualDensity.compact,
                     ),
-                    if (_selectedCategory == SearchCategory.tracks && _results.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      FilledButton.tonalIcon(
-                        icon: const Icon(Icons.play_arrow, size: 18),
-                        label: const Text('Play All'),
-                        style: FilledButton.styleFrom(
-                          shape: const StadiumBorder(),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 0,
-                          ),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        onPressed: () => _playback.playQueue(_results),
-                      ),
-                    ],
                   ],
                 ),
               ),
