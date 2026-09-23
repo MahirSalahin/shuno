@@ -59,7 +59,7 @@ class TrackTile extends StatelessWidget {
       child: InkWell(
         onTap: onTap ?? (playback.isLoading ? null : () => playback.playItem(item)),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.only(left: 10, right: 6, top: 8, bottom: 8),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -145,12 +145,13 @@ class TrackTile extends StatelessWidget {
                       children: [
                         Text(
                           item.title,
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleSmall?.copyWith(
                             color: isSelected ? theme.colorScheme.primary : null,
                             fontWeight:
                                 isSelected ? FontWeight.bold : FontWeight.normal,
+                            height: 1.25,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -230,28 +231,29 @@ class TrackTile extends StatelessWidget {
                     ),
                   ),
 
-                  // Favorite Button
+                  // Favorite Button (Ultra-compact)
                   IconButton(
-                    iconSize: 20,
-                    visualDensity: VisualDensity.compact,
-                    constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-                    padding: const EdgeInsets.all(6),
+                    iconSize: 18,
+                    visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                    constraints: const BoxConstraints.tightFor(width: 28, height: 34),
+                    padding: EdgeInsets.zero,
                     icon: Icon(
                       isFav ? Icons.favorite : Icons.favorite_border,
+                      size: 18,
                       color: isFav ? Colors.redAccent : null,
                     ),
                     tooltip: isFav ? 'Remove from favorites' : 'Add to favorites',
                     onPressed: () => storage.toggleFavorite(item),
                   ),
 
-                  // 1-Tap Download Button
+                  // 1-Tap Download Button (Ultra-compact)
                   if (downloadService != null && !isDownloaded && !isDownloading)
                     IconButton(
-                      iconSize: 20,
-                      visualDensity: VisualDensity.compact,
-                      constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-                      padding: const EdgeInsets.all(6),
-                      icon: const Icon(Icons.download_outlined),
+                      iconSize: 18,
+                      visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                      constraints: const BoxConstraints.tightFor(width: 28, height: 34),
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(Icons.download_outlined, size: 18),
                       tooltip: 'Download for offline',
                       onPressed: () {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -267,22 +269,31 @@ class TrackTile extends StatelessWidget {
                   // Trailing Action (e.g. Delete or Reorder handle)
                   if (trailingAction != null && onTrailingAction != null)
                     IconButton(
-                      iconSize: 20,
-                      visualDensity: VisualDensity.compact,
-                      constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-                      padding: const EdgeInsets.all(6),
-                      icon: Icon(trailingAction),
+                      iconSize: 18,
+                      visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                      constraints: const BoxConstraints.tightFor(width: 28, height: 34),
+                      padding: EdgeInsets.zero,
+                      icon: Icon(trailingAction, size: 18),
                       tooltip: trailingActionTooltip,
                       onPressed: onTrailingAction,
                     ),
 
-                  // Popup Menu
+                  // Popup Menu (Ultra-compact)
                   if (showMoreOptions)
                     PopupMenuButton<String>(
-                      iconSize: 20,
                       tooltip: 'More options',
-                      padding: const EdgeInsets.all(6),
-                      constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                      padding: EdgeInsets.zero,
+                      child: SizedBox(
+                        width: 28,
+                        height: 34,
+                        child: Center(
+                          child: Icon(
+                            Icons.more_vert,
+                            size: 18,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
                       onSelected: (value) async {
                         switch (value) {
                           case 'play':
@@ -309,6 +320,9 @@ class TrackTile extends StatelessWidget {
                               item: item,
                               storageService: storage,
                             );
+                            break;
+                          case 'favorite':
+                            storage.toggleFavorite(item);
                             break;
                           case 'download':
                             if (downloadService != null) {
@@ -372,6 +386,17 @@ class TrackTile extends StatelessWidget {
                           child: ListTile(
                             leading: Icon(Icons.playlist_add),
                             title: Text('Add to Playlist'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'favorite',
+                          child: ListTile(
+                            leading: Icon(
+                              isFav ? Icons.favorite : Icons.favorite_border,
+                              color: isFav ? Colors.redAccent : null,
+                            ),
+                            title: Text(isFav ? 'Remove from favorites' : 'Add to favorites'),
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
