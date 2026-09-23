@@ -6,6 +6,7 @@ import '../services/playback_controller.dart';
 import '../services/storage_service.dart';
 import 'add_to_playlist_dialog.dart';
 import 'animated_equalizer.dart';
+import 'confirm_dialog.dart';
 
 class TrackTile extends StatelessWidget {
   const TrackTile({
@@ -15,6 +16,7 @@ class TrackTile extends StatelessWidget {
     required this.storage,
     this.downloadService,
     this.onTap,
+    this.leadingWidget,
     this.trailingAction,
     this.trailingActionTooltip,
     this.onTrailingAction,
@@ -26,6 +28,7 @@ class TrackTile extends StatelessWidget {
   final StorageService storage;
   final DownloadService? downloadService;
   final VoidCallback? onTap;
+  final Widget? leadingWidget;
   final IconData? trailingAction;
   final String? trailingActionTooltip;
   final VoidCallback? onTrailingAction;
@@ -66,6 +69,10 @@ class TrackTile extends StatelessWidget {
             children: [
               Row(
                 children: [
+                  if (leadingWidget != null) ...[
+                    leadingWidget!,
+                    const SizedBox(width: 8),
+                  ],
                   // Active left accent indicator bar if playing
                   if (isSelected)
                     Container(
@@ -337,11 +344,20 @@ class TrackTile extends StatelessWidget {
                             break;
                           case 'delete_download':
                             if (downloadService != null) {
-                              await downloadService!.deleteDownload(item.id);
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Download deleted')),
-                                );
+                              final confirm = await showConfirmDialog(
+                                context,
+                                title: 'Delete Download?',
+                                message:
+                                    'Remove downloaded audio for "${item.title}" from your device?',
+                                confirmLabel: 'Delete',
+                              );
+                              if (confirm) {
+                                await downloadService!.deleteDownload(item.id);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Download deleted')),
+                                  );
+                                }
                               }
                             }
                             break;

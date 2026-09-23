@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/download_service.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/confirm_dialog.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({
@@ -164,34 +165,17 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 trailing: storage.downloads.isNotEmpty
                     ? TextButton(
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: const Text('Delete all downloads?'),
-                              content: const Text(
+                        onPressed: () async {
+                          final confirm = await showConfirmDialog(
+                            context,
+                            title: 'Delete all downloads?',
+                            message:
                                 'This will remove all downloaded offline files from your device.',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.of(context).pop(),
-                                  child: const Text('Cancel'),
-                                ),
-                                FilledButton(
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: theme.colorScheme.error,
-                                  ),
-                                  onPressed: () async {
-                                    await downloadService?.clearAllDownloads();
-                                    if (context.mounted) {
-                                      Navigator.of(context).pop();
-                                    }
-                                  },
-                                  child: const Text('Delete All'),
-                                ),
-                              ],
-                            ),
+                            confirmLabel: 'Delete All',
                           );
+                          if (confirm) {
+                            await downloadService?.clearAllDownloads();
+                          }
                         },
                         child: const Text('Clear'),
                       )
@@ -204,7 +188,18 @@ class SettingsScreen extends StatelessWidget {
                 subtitle: Text('${storage.history.length} played tracks'),
                 trailing: storage.history.isNotEmpty
                     ? TextButton(
-                        onPressed: () => storage.clearHistory(),
+                        onPressed: () async {
+                          final confirm = await showConfirmDialog(
+                            context,
+                            title: 'Clear Play History?',
+                            message:
+                                'Are you sure you want to clear your playback history?',
+                            confirmLabel: 'Clear',
+                          );
+                          if (confirm) {
+                            storage.clearHistory();
+                          }
+                        },
                         child: const Text('Clear'),
                       )
                     : null,
@@ -221,38 +216,23 @@ class SettingsScreen extends StatelessWidget {
                   style: TextStyle(color: theme.colorScheme.error),
                 ),
                 subtitle: const Text('Clear library, downloads, and history'),
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Reset Shuno?'),
-                      content: const Text(
+                onTap: () async {
+                  final confirm = await showConfirmDialog(
+                    context,
+                    title: 'Reset Shuno?',
+                    message:
                         'Are you sure you want to reset all data? This cannot be undone.',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('Cancel'),
-                        ),
-                        FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: theme.colorScheme.error,
-                          ),
-                          onPressed: () async {
-                            await downloadService?.clearAllDownloads();
-                            await storage.clearAllData();
-                            if (context.mounted) {
-                              Navigator.of(context).pop();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('All data reset')),
-                              );
-                            }
-                          },
-                          child: const Text('Reset'),
-                        ),
-                      ],
-                    ),
+                    confirmLabel: 'Reset',
                   );
+                  if (confirm) {
+                    await downloadService?.clearAllDownloads();
+                    await storage.clearAllData();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('All data reset')),
+                      );
+                    }
+                  }
                 },
               ),
             ],

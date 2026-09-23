@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/download_service.dart';
 import '../services/playback_controller.dart';
 import '../services/storage_service.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/track_tile.dart';
 import 'playlist_detail_screen.dart';
 
@@ -268,24 +269,13 @@ class _LibraryScreenState extends State<LibraryScreen>
                             constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
                             padding: const EdgeInsets.all(4),
                             onPressed: () async {
-                              final confirm = await showDialog<bool>(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-                                  title: const Text('Delete Playlist'),
-                                  content: Text('Delete "${pl.title}"?'),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.of(ctx).pop(false),
-                                      child: const Text('Cancel'),
-                                    ),
-                                    FilledButton(
-                                      onPressed: () => Navigator.of(ctx).pop(true),
-                                      child: const Text('Delete'),
-                                    ),
-                                  ],
-                                ),
+                              final confirm = await showConfirmDialog(
+                                context,
+                                title: 'Delete Playlist',
+                                message: 'Are you sure you want to delete "${pl.title}"?',
+                                confirmLabel: 'Delete',
                               );
-                              if (confirm == true) {
+                              if (confirm) {
                                 widget.storage.deletePlaylist(pl.id);
                               }
                             },
@@ -420,7 +410,17 @@ class _LibraryScreenState extends State<LibraryScreen>
               TextButton.icon(
                 icon: const Icon(Icons.delete_sweep, size: 18),
                 label: const Text('Clear'),
-                onPressed: () => widget.storage.clearHistory(),
+                onPressed: () async {
+                  final confirm = await showConfirmDialog(
+                    context,
+                    title: 'Clear History?',
+                    message: 'Are you sure you want to clear your listening history?',
+                    confirmLabel: 'Clear',
+                  );
+                  if (confirm) {
+                    widget.storage.clearHistory();
+                  }
+                },
               ),
             ],
           ),
@@ -560,8 +560,17 @@ class _LibraryScreenState extends State<LibraryScreen>
               downloadService: widget.downloadService,
               trailingAction: Icons.delete_outline,
               trailingActionTooltip: 'Delete downloaded file',
-              onTrailingAction: () {
-                widget.downloadService?.deleteDownload(d.item.id);
+              onTrailingAction: () async {
+                final confirm = await showConfirmDialog(
+                  context,
+                  title: 'Delete Download?',
+                  message:
+                      'Remove downloaded audio for "${d.item.title}" from your device?',
+                  confirmLabel: 'Delete',
+                );
+                if (confirm) {
+                  widget.downloadService?.deleteDownload(d.item.id);
+                }
               },
             ),
         ] else if (activeTasks.isNotEmpty) ...[

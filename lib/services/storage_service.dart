@@ -233,6 +233,29 @@ class StorageService extends ChangeNotifier {
     }
   }
 
+  Future<void> reorderPlaylistTracks(
+    String playlistId,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    final index = _playlists.indexWhere((p) => p.id == playlistId);
+    if (index >= 0) {
+      if (newIndex > oldIndex) {
+        newIndex -= 1;
+      }
+      final items = _playlists[index].items;
+      if (oldIndex >= 0 &&
+          oldIndex < items.length &&
+          newIndex >= 0 &&
+          newIndex < items.length) {
+        final item = items.removeAt(oldIndex);
+        items.insert(newIndex, item);
+        notifyListeners();
+        await _saveToDisk();
+      }
+    }
+  }
+
   Future<int> addTracksToPlaylist(
     String playlistId,
     List<YoutubeSearchItem> items,

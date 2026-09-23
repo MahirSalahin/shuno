@@ -9,6 +9,7 @@ import '../services/playback_controller.dart';
 import '../services/storage_service.dart';
 import '../services/youtube_service.dart';
 import '../widgets/channel_tile.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/playback_bar.dart';
 import '../widgets/track_tile.dart';
 import 'channel_detail_screen.dart';
@@ -296,7 +297,18 @@ class _SearchScreenState extends State<SearchScreen> {
                         ),
                   ),
                   TextButton(
-                    onPressed: () => _storage.clearRecentSearches(),
+                    onPressed: () async {
+                      final confirm = await showConfirmDialog(
+                        context,
+                        title: 'Clear Recent Searches?',
+                        message:
+                            'Are you sure you want to clear all recent search queries?',
+                        confirmLabel: 'Clear',
+                      );
+                      if (confirm) {
+                        _storage.clearRecentSearches();
+                      }
+                    },
                     child: const Text('Clear All'),
                   ),
                 ],

@@ -80,6 +80,45 @@ void main() {
     expect(storage.playlists, isEmpty);
   });
 
+  test('playlists tracks can be reordered and persisted', () async {
+    final playlist = await storage.createPlaylist('Reorder Test');
+    const item2 = YoutubeSearchItem(
+      id: 'song2',
+      title: 'Song 2',
+      channelName: 'Channel',
+      thumbnailUrl: '',
+    );
+    const item3 = YoutubeSearchItem(
+      id: 'song3',
+      title: 'Song 3',
+      channelName: 'Channel',
+      thumbnailUrl: '',
+    );
+
+    await storage.addTracksToPlaylist(playlist.id, [testItem, item2, item3]);
+    expect(storage.playlists.first.items.map((e) => e.id).toList(), [
+      'abc1234',
+      'song2',
+      'song3',
+    ]);
+
+    // Move first item (index 0) to end (index 3 in Flutter reorder semantics)
+    await storage.reorderPlaylistTracks(playlist.id, 0, 3);
+    expect(storage.playlists.first.items.map((e) => e.id).toList(), [
+      'song2',
+      'song3',
+      'abc1234',
+    ]);
+
+    // Move last item (index 2) to first (index 0)
+    await storage.reorderPlaylistTracks(playlist.id, 2, 0);
+    expect(storage.playlists.first.items.map((e) => e.id).toList(), [
+      'abc1234',
+      'song2',
+      'song3',
+    ]);
+  });
+
   test('download metadata can be saved and retrieved', () async {
     final download = DownloadItem(
       item: testItem,

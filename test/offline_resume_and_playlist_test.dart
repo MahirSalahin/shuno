@@ -298,5 +298,53 @@ void main() {
       expect(updated.items.length, 1);
       expect(updated.items.first.id, sampleItem.id);
     });
+
+    testWidgets('PlaylistDetailScreen shows drag handles and prompts before removing track', (tester) async {
+      final playlist = await storage.createPlaylist('Favorites Reorder');
+      await storage.addTracksToPlaylist(playlist.id, [sampleItem, sampleItem2]);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlaylistDetailScreen(
+            playlist: playlist,
+            playback: controller,
+            storage: storage,
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Check ReorderableListView is used
+      expect(find.byType(ReorderableListView), findsOneWidget);
+
+      // Check drag indicator icons exist for tracks
+      expect(find.byIcon(Icons.drag_indicator), findsNWidgets(2));
+
+      // Tap remove track button
+      final removeButtons = find.byTooltip('Remove from playlist');
+      expect(removeButtons, findsNWidgets(2));
+      await tester.tap(removeButtons.first);
+      await tester.pumpAndSettle();
+
+      // Verify confirmation dialog appeared
+      expect(find.text('Remove Song?'), findsOneWidget);
+      expect(find.text('Cancel'), findsOneWidget);
+      expect(find.text('Remove'), findsOneWidget);
+
+      // Tap Cancel -> track remains
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(storage.playlists.first.items.length, 2);
+
+      // Tap Remove button again and confirm
+      await tester.tap(removeButtons.first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove'));
+      await tester.pumpAndSettle();
+
+      // Track is now removed
+      expect(storage.playlists.first.items.length, 1);
+    });
   });
 }

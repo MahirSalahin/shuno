@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/download_service.dart';
 import '../services/playback_controller.dart';
 import '../services/storage_service.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/track_tile.dart';
 
 class QueueScreen extends StatelessWidget {
@@ -40,22 +41,40 @@ class QueueScreen extends StatelessWidget {
             TextButton.icon(
               icon: const Icon(Icons.clear_all, size: 18),
               label: const Text('Clear Up Next'),
-              onPressed: () {
-                playback.clearUpNext();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Upcoming queue cleared')),
+              onPressed: () async {
+                final confirm = await showConfirmDialog(
+                  context,
+                  title: 'Clear Up Next?',
+                  message:
+                      'Are you sure you want to remove all upcoming tracks from the queue?',
+                  confirmLabel: 'Clear',
                 );
+                if (confirm && context.mounted) {
+                  playback.clearUpNext();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Upcoming queue cleared')),
+                  );
+                }
               },
             )
           else if (playback.queue.isNotEmpty)
             TextButton.icon(
               icon: const Icon(Icons.delete_sweep, size: 18),
               label: const Text('Clear Queue'),
-              onPressed: () {
-                playback.clearQueue();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Queue cleared')),
+              onPressed: () async {
+                final confirm = await showConfirmDialog(
+                  context,
+                  title: 'Clear Queue?',
+                  message:
+                      'Are you sure you want to clear the entire playback queue?',
+                  confirmLabel: 'Clear',
                 );
+                if (confirm && context.mounted) {
+                  playback.clearQueue();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Queue cleared')),
+                  );
+                }
               },
             ),
         ],
@@ -268,6 +287,15 @@ class QueueScreen extends StatelessWidget {
                                     color: Colors.white,
                                   ),
                                 ),
+                                confirmDismiss: (_) async {
+                                  return await showConfirmDialog(
+                                    context,
+                                    title: 'Remove from Queue?',
+                                    message:
+                                        'Remove "${item.title}" from queue?',
+                                    confirmLabel: 'Remove',
+                                  );
+                                },
                                 onDismissed: (_) =>
                                     playback.removeAt(actualIndex),
                                 child: ListTile(
@@ -334,8 +362,18 @@ class QueueScreen extends StatelessWidget {
                                   trailing: IconButton(
                                     icon: const Icon(Icons.close, size: 18),
                                     tooltip: 'Remove from queue',
-                                    onPressed: () =>
-                                        playback.removeAt(actualIndex),
+                                    onPressed: () async {
+                                      final confirm = await showConfirmDialog(
+                                        context,
+                                        title: 'Remove from Queue?',
+                                        message:
+                                            'Remove "${item.title}" from queue?',
+                                        confirmLabel: 'Remove',
+                                      );
+                                      if (confirm) {
+                                        playback.removeAt(actualIndex);
+                                      }
+                                    },
                                   ),
                                   onTap: () => playback.playItem(item),
                                 ),

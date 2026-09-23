@@ -6,6 +6,7 @@ import '../services/download_service.dart';
 import '../services/playback_controller.dart';
 import '../services/storage_service.dart';
 import 'add_to_playlist_dialog.dart';
+import 'confirm_dialog.dart';
 
 class FullPlayerSheet extends StatefulWidget {
   const FullPlayerSheet({
@@ -643,11 +644,20 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          onPressed: () {
-                            downloadService?.deleteDownload(item.id);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Download deleted')),
+                          onPressed: () async {
+                            final confirm = await showConfirmDialog(
+                              context,
+                              title: 'Delete Download?',
+                              message:
+                                  'Remove downloaded audio for "${item.title}" from your device?',
+                              confirmLabel: 'Delete',
                             );
+                            if (confirm && context.mounted) {
+                              downloadService?.deleteDownload(item.id);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Download deleted')),
+                              );
+                            }
                           },
                         )
                       : TextButton.icon(

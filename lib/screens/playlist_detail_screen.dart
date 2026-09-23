@@ -5,6 +5,7 @@ import '../services/download_service.dart';
 import '../services/playback_controller.dart';
 import '../services/storage_service.dart';
 import '../widgets/add_songs_to_playlist_sheet.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/playback_bar.dart';
 import '../widgets/track_tile.dart';
 
@@ -61,33 +62,19 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     );
   }
 
-  void _delete(Playlist currentPlaylist) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Playlist'),
-        content: Text('Are you sure you want to delete "${currentPlaylist.title}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            onPressed: () async {
-              await widget.storage.deletePlaylist(currentPlaylist.id);
-              if (context.mounted) {
-                Navigator.of(context).pop(); // dismiss dialog
-                Navigator.of(context).pop(); // pop screen
-              }
-            },
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+  void _delete(Playlist currentPlaylist) async {
+    final confirm = await showConfirmDialog(
+      context,
+      title: 'Delete Playlist',
+      message: 'Are you sure you want to delete "${currentPlaylist.title}"?',
+      confirmLabel: 'Delete',
     );
+    if (confirm) {
+      await widget.storage.deletePlaylist(currentPlaylist.id);
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    }
   }
 
   void _openAddSongs(Playlist currentPlaylist) {
@@ -260,24 +247,59 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                           ],
                         ),
                       )
-                    : ListView.builder(
+                    : ReorderableListView.builder(
+                        buildDefaultDragHandles: false,
                         padding: const EdgeInsets.only(bottom: 100),
                         itemCount: items.length,
+                        onReorder: (oldIndex, newIndex) async {
+                          await widget.storage.reorderPlaylistTracks(
+                            currentPlaylist.id,
+                            oldIndex,
+                            newIndex,
+                          );
+                        },
                         itemBuilder: (context, index) {
                           final item = items[index];
-                          return TrackTile(
-                            item: item,
-                            playback: widget.playback,
-                            storage: widget.storage,
-                            downloadService: widget.downloadService,
-                            trailingAction: Icons.remove_circle_outline,
-                            trailingActionTooltip: 'Remove from playlist',
-                            onTrailingAction: () async {
-                              await widget.storage.removeTrackFromPlaylist(
-                                currentPlaylist.id,
-                                item.id,
-                              );
-                            },
+                          return ReorderableDelayedDragStartListener(
+                            key: ValueKey(
+                              'playlist_${currentPlaylist.id}_${item.id}_$index',
+                            ),
+                            index: index,
+                            child: TrackTile(
+                              item: item,
+                              playback: widget.playback,
+                              storage: widget.storage,
+                              downloadService: widget.downloadService,
+                              leadingWidget: ReorderableDragStartListener(
+                                index: index,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(right: 2),
+                                  child: Icon(
+                                    Icons.drag_indicator,
+                                    size: 18,
+                                    color: theme.colorScheme.outline
+                                        .withAlpha(160),
+                                  ),
+                                ),
+                              ),
+                              trailingAction: Icons.remove_circle_outline,
+                              trailingActionTooltip: 'Remove from playlist',
+                              onTrailingAction: () async {
+                                final confirm = await showConfirmDialog(
+                                  context,
+                                  title: 'Remove Song?',
+                                  message:
+                                      'Remove "${item.title}" from "${currentPlaylist.title}"?',
+                                  confirmLabel: 'Remove',
+                                );
+                                if (confirm) {
+                                  await widget.storage.removeTrackFromPlaylist(
+                                    currentPlaylist.id,
+                                    item.id,
+                                  );
+                                }
+                              },
+                            ),
                           );
                         },
                       ),
