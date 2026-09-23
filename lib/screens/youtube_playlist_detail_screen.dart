@@ -148,6 +148,8 @@ class _YoutubePlaylistDetailScreenState
                                   child: widget.playlist.thumbnailUrl.isNotEmpty
                                       ? Image.network(
                                           widget.playlist.thumbnailUrl,
+                                          cacheWidth: 360,
+                                          cacheHeight: 360,
                                           fit: BoxFit.cover,
                                           errorBuilder:
                                               (context, error, stackTrace) =>
@@ -312,6 +314,7 @@ class _YoutubePlaylistDetailScreenState
                       (context, index) {
                         final track = displayedTracks[index];
                         return TrackTile(
+                          key: ValueKey(track.id),
                           item: track,
                           playback: widget.playback,
                           storage: widget.storage,

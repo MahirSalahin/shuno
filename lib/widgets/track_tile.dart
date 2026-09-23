@@ -101,6 +101,8 @@ class TrackTile extends StatelessWidget {
                                 item.thumbnailUrl,
                                 width: 50,
                                 height: 50,
+                                cacheWidth: 150,
+                                cacheHeight: 150,
                                 fit: BoxFit.cover,
                                 excludeFromSemantics: true,
                                 errorBuilder: (context, error, stackTrace) =>
@@ -127,10 +129,12 @@ class TrackTile extends StatelessWidget {
                             ),
                             child: Center(
                               child: playback.isPlaying
-                                  ? AnimatedEqualizer(
-                                      color: theme.colorScheme.primary,
-                                      isPlaying: true,
-                                      size: 20,
+                                  ? RepaintBoundary(
+                                      child: AnimatedEqualizer(
+                                        color: theme.colorScheme.primary,
+                                        isPlaying: true,
+                                        size: 20,
+                                      ),
                                     )
                                   : Icon(
                                       Icons.pause_circle_outline,

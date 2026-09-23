@@ -41,6 +41,8 @@ class ChannelTile extends StatelessWidget {
                         channel.thumbnailUrl,
                         width: 48,
                         height: 48,
+                        cacheWidth: 144,
+                        cacheHeight: 144,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => Container(
                           width: 48,

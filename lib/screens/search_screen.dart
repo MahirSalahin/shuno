@@ -57,23 +57,49 @@ class _SearchScreenState extends State<SearchScreen> {
   String? _inputError;
   String? _searchError;
 
+  String? _lastPlayingId;
+  bool _lastIsPlaying = false;
+  bool _lastIsBuffering = false;
+  bool _lastIsLoading = false;
+
   @override
   void initState() {
     super.initState();
-    _playback.addListener(_update);
-    _storage.addListener(_update);
-    _downloadService.addListener(_update);
+    _lastPlayingId = _playback.selected?.id;
+    _lastIsPlaying = _playback.isPlaying;
+    _lastIsBuffering = _playback.isBuffering;
+    _lastIsLoading = _playback.isLoading;
+    _playback.addListener(_onPlaybackUpdate);
+    _storage.addListener(_onServiceUpdate);
+    _downloadService.addListener(_onServiceUpdate);
   }
 
-  void _update() {
+  void _onPlaybackUpdate() {
+    final curId = _playback.selected?.id;
+    final curPlaying = _playback.isPlaying;
+    final curBuffering = _playback.isBuffering;
+    final curLoading = _playback.isLoading;
+    if (curId != _lastPlayingId ||
+        curPlaying != _lastIsPlaying ||
+        curBuffering != _lastIsBuffering ||
+        curLoading != _lastIsLoading) {
+      _lastPlayingId = curId;
+      _lastIsPlaying = curPlaying;
+      _lastIsBuffering = curBuffering;
+      _lastIsLoading = curLoading;
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _onServiceUpdate() {
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _playback.removeListener(_update);
-    _storage.removeListener(_update);
-    _downloadService.removeListener(_update);
+    _playback.removeListener(_onPlaybackUpdate);
+    _storage.removeListener(_onServiceUpdate);
+    _downloadService.removeListener(_onServiceUpdate);
     if (widget.playbackController == null) _playback.dispose();
     _queryController.dispose();
     super.dispose();
@@ -389,6 +415,7 @@ class _SearchScreenState extends State<SearchScreen> {
         itemBuilder: (context, index) {
           final item = _results[index];
           return TrackTile(
+            key: ValueKey(item.id),
             item: item,
             playback: _playback,
             storage: _storage,
@@ -411,6 +438,7 @@ class _SearchScreenState extends State<SearchScreen> {
         itemBuilder: (context, index) {
           final channel = _channelResults[index];
           return ChannelTile(
+            key: ValueKey(channel.id),
             channel: channel,
             onTap: () {
               Navigator.of(context).push(

@@ -359,8 +359,11 @@ class YoutubeService {
         if (postRes.statusCode != 200) {
           return const ChannelUploadsPage(items: []);
         }
-        final data = jsonDecode(postRes.body);
-        return _extractChannelUploadsPageFromJson(data, channelName ?? '');
+        return compute(_parseChannelUploadsWorker, {
+          'body': postRes.body,
+          'channelName': channelName ?? '',
+          'isJson': 'true',
+        });
       }
 
       final videosUrl = id.startsWith('@')
@@ -379,20 +382,11 @@ class YoutubeService {
         return const ChannelUploadsPage(items: []);
       }
 
-      var match = RegExp(
-        r'var ytInitialData\s*=\s*(\{.+?\});?\s*<\/script>',
-        dotAll: true,
-      ).firstMatch(response.body);
-      match ??= RegExp(
-        r'window\["ytInitialData"\]\s*=\s*(\{.+?\});?\s*<\/script>',
-        dotAll: true,
-      ).firstMatch(response.body);
-      if (match == null) {
-        return const ChannelUploadsPage(items: []);
-      }
-
-      final data = jsonDecode(match.group(1)!);
-      return _extractChannelUploadsPageFromJson(data, channelName ?? '');
+      return compute(_parseChannelUploadsWorker, {
+        'body': response.body,
+        'channelName': channelName ?? '',
+        'isJson': 'false',
+      });
     } catch (_) {
       return const ChannelUploadsPage(items: []);
     }
@@ -431,8 +425,11 @@ class YoutubeService {
         if (postRes.statusCode != 200) {
           return const ChannelPlaylistsPage(items: []);
         }
-        final data = jsonDecode(postRes.body);
-        return _extractChannelPlaylistsPageFromJson(data, channelName);
+        return compute(_parseChannelPlaylistsWorker, {
+          'body': postRes.body,
+          'channelName': channelName,
+          'isJson': 'true',
+        });
       }
 
       final playlistsUrl = 'https://www.youtube.com/channel/$id/playlists?hl=en';
@@ -449,16 +446,11 @@ class YoutubeService {
         return const ChannelPlaylistsPage(items: []);
       }
 
-      final match = RegExp(
-        r'var ytInitialData = (\{.+?\});<\/script>',
-        dotAll: true,
-      ).firstMatch(response.body);
-      if (match == null) {
-        return const ChannelPlaylistsPage(items: []);
-      }
-
-      final data = jsonDecode(match.group(1)!);
-      return _extractChannelPlaylistsPageFromJson(data, channelName);
+      return compute(_parseChannelPlaylistsWorker, {
+        'body': response.body,
+        'channelName': channelName,
+        'isJson': 'false',
+      });
     } catch (_) {
       return const ChannelPlaylistsPage(items: []);
     }
@@ -475,7 +467,7 @@ class YoutubeService {
     return page.items;
   }
 
-  ChannelPlaylistsPage _extractChannelPlaylistsPageFromJson(
+  static ChannelPlaylistsPage _extractChannelPlaylistsPageFromJson(
     dynamic node,
     String defaultAuthor,
   ) {
@@ -647,17 +639,13 @@ class YoutubeService {
 
     if (res.statusCode != 200) return [];
 
-    final match = RegExp(
-      r'var ytInitialData = (\{.+?\});<\/script>',
-      dotAll: true,
-    ).firstMatch(res.body);
-    if (match == null) return [];
-
-    final data = jsonDecode(match.group(1)!);
-    return _extractPlaylistVideosFromJson(data, limit: limit);
+    return compute(_parsePlaylistTracksWorker, {
+      'body': res.body,
+      'limit': limit,
+    });
   }
 
-  List<YoutubeSearchItem> _extractPlaylistVideosFromJson(
+  static List<YoutubeSearchItem> _extractPlaylistVideosFromJson(
     dynamic node, {
     int limit = 50,
   }) {
@@ -713,24 +701,16 @@ class YoutubeService {
 
       if (response.statusCode != 200) return [];
 
-      var match = RegExp(
-        r'var ytInitialData\s*=\s*(\{.+?\});?\s*<\/script>',
-        dotAll: true,
-      ).firstMatch(response.body);
-      match ??= RegExp(
-        r'window\["ytInitialData"\]\s*=\s*(\{.+?\});?\s*<\/script>',
-        dotAll: true,
-      ).firstMatch(response.body);
-      if (match == null) return [];
-
-      final data = jsonDecode(match.group(1)!);
-      return _extractChannelVideosFromJson(data, channelName ?? '');
+      return compute(_parseChannelSearchWorker, {
+        'body': response.body,
+        'channelName': channelName ?? '',
+      });
     } catch (_) {
       return [];
     }
   }
 
-  List<YoutubeSearchItem> _extractChannelVideosFromJson(
+  static List<YoutubeSearchItem> _extractChannelVideosFromJson(
     dynamic node,
     String defaultAuthor,
   ) {
@@ -757,7 +737,7 @@ class YoutubeService {
     return results;
   }
 
-  ChannelUploadsPage _extractChannelUploadsPageFromJson(
+  static ChannelUploadsPage _extractChannelUploadsPageFromJson(
     dynamic node,
     String defaultAuthor,
   ) {
@@ -804,7 +784,7 @@ class YoutubeService {
   ) =>
       _extractChannelUploadsPageFromJson(node, defaultAuthor);
 
-  YoutubeSearchItem? _parseVideoFromNode(
+  static YoutubeSearchItem? _parseVideoFromNode(
     Map<String, dynamic> obj,
     Set<String> seenIds,
     String defaultAuthor,
@@ -1076,7 +1056,7 @@ class YoutubeService {
     }
   }
 
-  Duration? _parseDuration(String text) {
+  static Duration? _parseDuration(String text) {
     if (text.isEmpty) return null;
     var seconds = 0;
     for (final part in text.split(':')) {
@@ -1087,3 +1067,106 @@ class YoutubeService {
     return Duration(seconds: seconds);
   }
 }
+
+ChannelUploadsPage _parseChannelUploadsWorker(Map<String, String> params) {
+  final body = params['body'] ?? '';
+  final channelName = params['channelName'] ?? '';
+  final isJson = params['isJson'] == 'true';
+
+  try {
+    dynamic data;
+    if (isJson) {
+      data = jsonDecode(body);
+    } else {
+      var match = RegExp(
+        r'var ytInitialData\s*=\s*(\{.+?\});?\s*<\/script>',
+        dotAll: true,
+      ).firstMatch(body);
+      match ??= RegExp(
+        r'window\["ytInitialData"\]\s*=\s*(\{.+?\});?\s*<\/script>',
+        dotAll: true,
+      ).firstMatch(body);
+      if (match == null) {
+        return const ChannelUploadsPage(items: []);
+      }
+      data = jsonDecode(match.group(1)!);
+    }
+    return YoutubeService._extractChannelUploadsPageFromJson(data, channelName);
+  } catch (_) {
+    return const ChannelUploadsPage(items: []);
+  }
+}
+
+ChannelPlaylistsPage _parseChannelPlaylistsWorker(Map<String, String> params) {
+  final body = params['body'] ?? '';
+  final channelName = params['channelName'] ?? '';
+  final isJson = params['isJson'] == 'true';
+
+  try {
+    dynamic data;
+    if (isJson) {
+      data = jsonDecode(body);
+    } else {
+      var match = RegExp(
+        r'var ytInitialData\s*=\s*(\{.+?\});?\s*<\/script>',
+        dotAll: true,
+      ).firstMatch(body);
+      match ??= RegExp(
+        r'window\["ytInitialData"\]\s*=\s*(\{.+?\});?\s*<\/script>',
+        dotAll: true,
+      ).firstMatch(body);
+      if (match == null) {
+        return const ChannelPlaylistsPage(items: []);
+      }
+      data = jsonDecode(match.group(1)!);
+    }
+    return YoutubeService._extractChannelPlaylistsPageFromJson(data, channelName);
+  } catch (_) {
+    return const ChannelPlaylistsPage(items: []);
+  }
+}
+
+List<YoutubeSearchItem> _parsePlaylistTracksWorker(Map<String, dynamic> params) {
+  final body = params['body'] as String? ?? '';
+  final limit = params['limit'] as int? ?? 50;
+
+  try {
+    var match = RegExp(
+      r'var ytInitialData\s*=\s*(\{.+?\});?\s*<\/script>',
+      dotAll: true,
+    ).firstMatch(body);
+    match ??= RegExp(
+      r'window\["ytInitialData"\]\s*=\s*(\{.+?\});?\s*<\/script>',
+      dotAll: true,
+    ).firstMatch(body);
+    if (match == null) return [];
+
+    final data = jsonDecode(match.group(1)!);
+    return YoutubeService._extractPlaylistVideosFromJson(data, limit: limit);
+  } catch (_) {
+    return [];
+  }
+}
+
+List<YoutubeSearchItem> _parseChannelSearchWorker(Map<String, String> params) {
+  final body = params['body'] ?? '';
+  final channelName = params['channelName'] ?? '';
+
+  try {
+    var match = RegExp(
+      r'var ytInitialData\s*=\s*(\{.+?\});?\s*<\/script>',
+      dotAll: true,
+    ).firstMatch(body);
+    match ??= RegExp(
+      r'window\["ytInitialData"\]\s*=\s*(\{.+?\});?\s*<\/script>',
+      dotAll: true,
+    ).firstMatch(body);
+    if (match == null) return [];
+
+    final data = jsonDecode(match.group(1)!);
+    return YoutubeService._extractChannelVideosFromJson(data, channelName);
+  } catch (_) {
+    return [];
+  }
+}
+

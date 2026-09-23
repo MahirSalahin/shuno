@@ -40,6 +40,8 @@ class ChannelPlaylistTile extends StatelessWidget {
                 child: playlist.thumbnailUrl.isNotEmpty
                     ? Image.network(
                         playlist.thumbnailUrl,
+                        cacheWidth: 174,
+                        cacheHeight: 174,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) =>
                             _buildPlaceholder(theme),

@@ -57,25 +57,51 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
   bool _isSearchingInChannel = false;
   String? _error;
 
+  String? _lastPlayingId;
+  bool _lastIsPlaying = false;
+  bool _lastIsBuffering = false;
+  bool _lastIsLoading = false;
+
   @override
   void initState() {
     super.initState();
     _channel = widget.channel;
-    widget.playback.addListener(_onUpdate);
-    widget.storage.addListener(_onUpdate);
-    widget.downloadService?.addListener(_onUpdate);
+    _lastPlayingId = widget.playback.selected?.id;
+    _lastIsPlaying = widget.playback.isPlaying;
+    _lastIsBuffering = widget.playback.isBuffering;
+    _lastIsLoading = widget.playback.isLoading;
+    widget.playback.addListener(_onPlaybackUpdate);
+    widget.storage.addListener(_onServiceUpdate);
+    widget.downloadService?.addListener(_onServiceUpdate);
     _loadChannelData();
   }
 
-  void _onUpdate() {
+  void _onPlaybackUpdate() {
+    final curId = widget.playback.selected?.id;
+    final curPlaying = widget.playback.isPlaying;
+    final curBuffering = widget.playback.isBuffering;
+    final curLoading = widget.playback.isLoading;
+    if (curId != _lastPlayingId ||
+        curPlaying != _lastIsPlaying ||
+        curBuffering != _lastIsBuffering ||
+        curLoading != _lastIsLoading) {
+      _lastPlayingId = curId;
+      _lastIsPlaying = curPlaying;
+      _lastIsBuffering = curBuffering;
+      _lastIsLoading = curLoading;
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _onServiceUpdate() {
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    widget.playback.removeListener(_onUpdate);
-    widget.storage.removeListener(_onUpdate);
-    widget.downloadService?.removeListener(_onUpdate);
+    widget.playback.removeListener(_onPlaybackUpdate);
+    widget.storage.removeListener(_onServiceUpdate);
+    widget.downloadService?.removeListener(_onServiceUpdate);
     _searchController.dispose();
     _playlistSearchController.dispose();
     super.dispose();
@@ -380,6 +406,8 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                                 child: _channel.thumbnailUrl.isNotEmpty
                                     ? Image.network(
                                         _channel.thumbnailUrl,
+                                        cacheWidth: 240,
+                                        cacheHeight: 240,
                                         fit: BoxFit.cover,
                                         errorBuilder: (context, error, stackTrace) =>
                                             Container(
@@ -585,6 +613,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                             (context, index) {
                               final item = displayedVideos[index];
                               return TrackTile(
+                                key: ValueKey(item.id),
                                 item: item,
                                 playback: widget.playback,
                                 storage: widget.storage,
@@ -710,6 +739,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                             (context, index) {
                               final playlist = displayedPlaylists[index];
                               return ChannelPlaylistTile(
+                                key: ValueKey(playlist.id),
                                 playlist: playlist,
                                 onTap: () {
                                   Navigator.of(context).push(

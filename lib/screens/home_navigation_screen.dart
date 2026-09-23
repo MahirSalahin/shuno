@@ -30,24 +30,38 @@ class HomeNavigationScreen extends StatefulWidget {
 
 class _HomeNavigationScreenState extends State<HomeNavigationScreen> {
   int _currentIndex = 0;
+  String? _lastTrackId;
+  int _lastUpcomingCount = 0;
 
   @override
   void initState() {
     super.initState();
-    widget.playbackController.addListener(_onUpdate);
-    widget.storageService.addListener(_onUpdate);
-    widget.downloadService.addListener(_onUpdate);
+    _lastTrackId = widget.playbackController.selected?.id;
+    _lastUpcomingCount = widget.playbackController.upNext.length;
+    widget.playbackController.addListener(_onPlaybackUpdate);
+    widget.storageService.addListener(_onServiceUpdate);
+    widget.downloadService.addListener(_onServiceUpdate);
   }
 
-  void _onUpdate() {
+  void _onPlaybackUpdate() {
+    final trackId = widget.playbackController.selected?.id;
+    final count = widget.playbackController.upNext.length;
+    if (trackId != _lastTrackId || count != _lastUpcomingCount) {
+      _lastTrackId = trackId;
+      _lastUpcomingCount = count;
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _onServiceUpdate() {
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    widget.playbackController.removeListener(_onUpdate);
-    widget.storageService.removeListener(_onUpdate);
-    widget.downloadService.removeListener(_onUpdate);
+    widget.playbackController.removeListener(_onPlaybackUpdate);
+    widget.storageService.removeListener(_onServiceUpdate);
+    widget.downloadService.removeListener(_onServiceUpdate);
     super.dispose();
   }
 

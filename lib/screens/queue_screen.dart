@@ -172,6 +172,8 @@ class QueueScreen extends StatelessWidget {
                                       prev.thumbnailUrl,
                                       width: 44,
                                       height: 32,
+                                      cacheWidth: 132,
+                                      cacheHeight: 96,
                                       fit: BoxFit.cover,
                                       errorBuilder:
                                           (context, error, stackTrace) =>
@@ -322,6 +324,8 @@ class QueueScreen extends StatelessWidget {
                                                 item.thumbnailUrl,
                                                 width: 40,
                                                 height: 40,
+                                                cacheWidth: 120,
+                                                cacheHeight: 120,
                                                 fit: BoxFit.cover,
                                                 errorBuilder: (context, error,
                                                         stackTrace) =>
