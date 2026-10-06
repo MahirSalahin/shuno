@@ -103,6 +103,11 @@ class YoutubeService {
     final trimmedQuery = query.trim();
     if (trimmedQuery.isEmpty) return [];
 
+    try {
+      final scraped = await _scrapeChannels(trimmedQuery);
+      if (scraped.isNotEmpty) return scraped;
+    } catch (_) {}
+
     final youtube = YoutubeExplode();
     try {
       final results = await youtube.search
@@ -128,6 +133,23 @@ class YoutubeService {
     } finally {
       youtube.close();
     }
+  }
+
+  Future<List<YoutubeChannelItem>> _scrapeChannels(String query) async {
+    final url =
+        'https://www.youtube.com/results?search_query=${Uri.encodeQueryComponent(query)}&sp=EgIQAg%253D%253D&hl=en';
+    final res = await http.get(
+      Uri.parse(url),
+      headers: {
+        'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    ).timeout(const Duration(seconds: 15));
+
+    if (res.statusCode != 200) return [];
+
+    return compute(_parseChannelsWorker, res.body);
   }
 
   Future<List<YoutubePlaylistItem>> searchPlaylists(String query) async {
@@ -759,6 +781,10 @@ class YoutubeService {
   ) =>
       _extractChannelUploadsPageFromJson(node, defaultAuthor);
 
+  @visibleForTesting
+  List<YoutubeChannelItem> extractChannelsFromJson(dynamic node) =>
+      _extractChannelsFromJson(node);
+
   static YoutubeSearchItem? _parseVideoFromNode(
     Map<String, dynamic> obj,
     Set<String> seenIds,
@@ -1031,6 +1057,108 @@ class YoutubeService {
     }
   }
 
+  static List<YoutubeChannelItem> _extractChannelsFromJson(dynamic data) {
+    final channels = <YoutubeChannelItem>[];
+    final seenIds = <String>{};
+
+    void extract(dynamic node) {
+      if (node is Map) {
+        if (node.containsKey('channelRenderer')) {
+          final cr = node['channelRenderer'] as Map<String, dynamic>;
+          final id = cr['channelId'] as String? ?? '';
+          if (id.isNotEmpty && !seenIds.contains(id)) {
+            seenIds.add(id);
+            final titleMap = cr['title'] as Map<String, dynamic>?;
+            final title = titleMap?['simpleText'] as String? ??
+                (titleMap?['runs'] as List?)?.firstOrNull?['text'] as String? ??
+                '';
+            final thumbs = cr['thumbnail']?['thumbnails'] as List?;
+            var thumbUrl = thumbs?.isNotEmpty == true
+                ? thumbs!.last['url'] as String? ?? ''
+                : '';
+            if (thumbUrl.startsWith('//')) {
+              thumbUrl = 'https:$thumbUrl';
+            }
+
+            final videoCountText =
+                cr['videoCountText']?['simpleText'] as String? ?? '';
+            final subscriberCountText =
+                cr['subscriberCountText']?['simpleText'] as String? ?? '';
+
+            int? subscribers;
+            int? videos;
+            if (videoCountText.toLowerCase().contains('subscriber')) {
+              subscribers = _parseSubscribers(videoCountText);
+            } else if (videoCountText.toLowerCase().contains('video')) {
+              videos = _parseVideos(videoCountText);
+            }
+            if (subscriberCountText.toLowerCase().contains('subscriber')) {
+              subscribers ??= _parseSubscribers(subscriberCountText);
+            } else if (subscriberCountText.toLowerCase().contains('video')) {
+              videos ??= _parseVideos(subscriberCountText);
+            }
+
+            final descRuns = cr['descriptionSnippet']?['runs'] as List?;
+            final desc =
+                descRuns?.map((r) => r['text'] ?? '').join('') ?? '';
+
+            channels.add(
+              YoutubeChannelItem(
+                id: id,
+                title: title,
+                thumbnailUrl: thumbUrl,
+                subscriberCount: subscribers,
+                videoCount: videos,
+                description: desc.isNotEmpty ? desc : null,
+              ),
+            );
+          }
+        }
+        for (final v in node.values) {
+          extract(v);
+        }
+      } else if (node is List) {
+        for (final v in node) {
+          extract(v);
+        }
+      }
+    }
+
+    extract(data);
+    return channels;
+  }
+
+  static int? _parseSubscribers(String text) {
+    final clean = text.replaceAll(',', '').trim();
+    final match = RegExp(
+      r'([\d.]+)\s*([KMBkmb])?\s*(?:subscribers|subscriber)?',
+      caseSensitive: false,
+    ).firstMatch(clean);
+    if (match == null) return null;
+    final numVal = double.tryParse(match.group(1) ?? '');
+    if (numVal == null) return null;
+    final unit = match.group(2)?.toUpperCase();
+    if (unit == 'M') return (numVal * 1000000).toInt();
+    if (unit == 'K') return (numVal * 1000).toInt();
+    if (unit == 'B') return (numVal * 1000000000).toInt();
+    return numVal.toInt();
+  }
+
+  static int? _parseVideos(String text) {
+    final clean = text.replaceAll(',', '').trim();
+    final match = RegExp(
+      r'([\d.]+)\s*([KMBkmb])?\s*(?:videos|video)?',
+      caseSensitive: false,
+    ).firstMatch(clean);
+    if (match == null) return null;
+    final numVal = double.tryParse(match.group(1) ?? '');
+    if (numVal == null) return null;
+    final unit = match.group(2)?.toUpperCase();
+    if (unit == 'M') return (numVal * 1000000).toInt();
+    if (unit == 'K') return (numVal * 1000).toInt();
+    return numVal.toInt();
+  }
+
   static Duration? _parseDuration(String text) {
     if (text.isEmpty) return null;
     var seconds = 0;
@@ -1144,4 +1272,24 @@ List<YoutubeSearchItem> _parseChannelSearchWorker(Map<String, String> params) {
     return [];
   }
 }
+
+List<YoutubeChannelItem> _parseChannelsWorker(String body) {
+  try {
+    var match = RegExp(
+      r'var ytInitialData\s*=\s*(\{.+?\});?\s*<\/script>',
+      dotAll: true,
+    ).firstMatch(body);
+    match ??= RegExp(
+      r'window\["ytInitialData"\]\s*=\s*(\{.+?\});?\s*<\/script>',
+      dotAll: true,
+    ).firstMatch(body);
+    if (match == null) return [];
+
+    final data = jsonDecode(match.group(1)!);
+    return YoutubeService._extractChannelsFromJson(data);
+  } catch (_) {
+    return [];
+  }
+}
+
 

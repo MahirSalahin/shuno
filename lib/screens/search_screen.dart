@@ -133,7 +133,6 @@ class _SearchScreenState extends State<SearchScreen> {
       _results = [];
       _playlistResults = [];
       _channelResults = [];
-      _selectedCategory = SearchCategory.tracks;
     });
 
     try {

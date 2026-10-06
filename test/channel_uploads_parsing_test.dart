@@ -170,5 +170,57 @@ void main() {
       expect(result.items[1].duration, const Duration(hours: 1, minutes: 2, seconds: 30));
       expect(result.hasMore, isFalse);
     });
+
+    test('extracts channels from channelRenderer JSON with simpleText, subscriber counts, and description', () {
+      final mockData = {
+        'contents': {
+          'twoColumnSearchResultsRenderer': {
+            'primaryContents': {
+              'sectionListRenderer': {
+                'contents': [
+                  {
+                    'itemSectionRenderer': {
+                      'contents': [
+                        {
+                          'channelRenderer': {
+                            'channelId': 'UCZQlxuOswpcuhwf4H1IrqaA',
+                            'title': {'simpleText': 'Coke Studio'},
+                            'thumbnail': {
+                              'thumbnails': [
+                                {
+                                  'url': '//yt3.googleusercontent.com/avatar.jpg',
+                                  'width': 176,
+                                  'height': 176,
+                                }
+                              ]
+                            },
+                            'videoCountText': {'simpleText': '546 subscribers'},
+                            'subscriberCountText': {'simpleText': '@CokeStudio7'},
+                            'descriptionSnippet': {
+                              'runs': [
+                                {'text': 'Official Coke Studio channel'}
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      };
+
+      final channels = service.extractChannelsFromJson(mockData);
+      expect(channels.length, 1);
+      final ch = channels.first;
+      expect(ch.id, 'UCZQlxuOswpcuhwf4H1IrqaA');
+      expect(ch.title, 'Coke Studio');
+      expect(ch.thumbnailUrl, 'https://yt3.googleusercontent.com/avatar.jpg');
+      expect(ch.subscriberCount, 546);
+      expect(ch.description, 'Official Coke Studio channel');
+    });
   });
 }

@@ -847,6 +847,63 @@ void main() {
     expect(find.byType(YoutubePlaylistDetailScreen), findsOneWidget);
     expect(find.text('Pasoori'), findsOneWidget);
   });
+
+  testWidgets('preserves selected category across subsequent searches', (
+    tester,
+  ) async {
+    final service = FakeYoutubeService();
+    service.channelsToReturn = [
+      const YoutubeChannelItem(
+        id: 'c-1',
+        title: 'Channel 1',
+        thumbnailUrl: '',
+      ),
+    ];
+    service.playlistsToReturn = [
+      const YoutubePlaylistItem(
+        id: 'p-1',
+        title: 'Playlist 1',
+        thumbnailUrl: '',
+        videoCount: 5,
+      ),
+    ];
+
+    await openSearch(tester, service);
+    await submit(tester, 'first query');
+    service.response.complete([sample]);
+    await tester.pumpAndSettle();
+
+    // Select Playlists
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Playlists'));
+    await tester.pumpAndSettle();
+
+    final playlistsChip = tester.widget<ChoiceChip>(
+      find.widgetWithText(ChoiceChip, 'Playlists'),
+    );
+    expect(playlistsChip.selected, isTrue);
+
+    // Perform another search
+    service.response = Completer();
+    service.playlistsToReturn = [
+      const YoutubePlaylistItem(
+        id: 'p-2',
+        title: 'Playlist 2',
+        thumbnailUrl: '',
+        videoCount: 8,
+      ),
+    ];
+    await submit(tester, 'second query');
+    service.response.complete([sample]);
+    await tester.pumpAndSettle();
+
+    // Selected category must still be Playlists
+    final playlistsChipAfter = tester.widget<ChoiceChip>(
+      find.widgetWithText(ChoiceChip, 'Playlists'),
+    );
+    expect(playlistsChipAfter.selected, isTrue);
+    expect(find.text('Playlist 2'), findsOneWidget);
+  });
 }
+
 
 
