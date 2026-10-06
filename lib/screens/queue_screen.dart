@@ -303,6 +303,7 @@ class QueueScreen extends StatelessWidget {
                           ),
                         )
                       : ReorderableListView.builder(
+                          buildDefaultDragHandles: false,
                           padding: const EdgeInsets.only(bottom: 100),
                           itemCount: upNext.length,
                           onReorder: (oldIndex, newIndex) {
@@ -315,6 +316,9 @@ class QueueScreen extends StatelessWidget {
                             final actualIndex = currentIndex + 1 + index;
 
                             return Container(
+                              key: ValueKey(
+                                'queue_item_${item.id}_$actualIndex',
+                              ),
                               margin: const EdgeInsets.symmetric(
                                 horizontal: 10,
                                 vertical: 2,
@@ -330,7 +334,9 @@ class QueueScreen extends StatelessWidget {
                               ),
                               clipBehavior: Clip.antiAlias,
                               child: Dismissible(
-                                key: ValueKey('upnext_${item.id}_$actualIndex'),
+                                key: ValueKey(
+                                  'upnext_dismiss_${item.id}_$actualIndex',
+                                ),
                                 direction: DismissDirection.endToStart,
                                 background: Container(
                                   alignment: Alignment.centerRight,

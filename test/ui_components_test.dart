@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shuno/models/youtube_search_item.dart';
 import 'package:shuno/screens/home_navigation_screen.dart';
+import 'package:shuno/screens/queue_screen.dart';
 import 'package:shuno/services/download_service.dart';
 import 'package:shuno/services/playback_controller.dart';
 import 'package:shuno/services/storage_service.dart';
@@ -131,4 +132,59 @@ void main() {
     expect(find.text('Download for Offline'), findsOneWidget);
     expect(find.text('Remove from favorites'), findsOneWidget);
   });
+
+  testWidgets('QueueScreen renders UP NEXT items with ReorderableListView without errors', (
+    tester,
+  ) async {
+    final storage = StorageService();
+    final youtube = FakeService();
+    final playback = PlaybackController(
+      youtubeService: youtube,
+      player: FakeAudioPlayer(),
+      storageService: storage,
+    );
+    final download = DownloadService(storageService: storage);
+
+    addTearDown(playback.dispose);
+
+    const track1 = YoutubeSearchItem(
+      id: 'song_1',
+      title: 'Current Song',
+      channelName: 'Artist 1',
+      thumbnailUrl: '',
+    );
+    const track2 = YoutubeSearchItem(
+      id: 'song_2',
+      title: 'Up Next Song 1',
+      channelName: 'Artist 2',
+      thumbnailUrl: '',
+    );
+    const track3 = YoutubeSearchItem(
+      id: 'song_3',
+      title: 'Up Next Song 2',
+      channelName: 'Artist 3',
+      thumbnailUrl: '',
+    );
+
+    // Play queue with track 1 current, tracks 2 & 3 in up next
+    await playback.playQueue([track1, track2, track3], initialIndex: 0);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: QueueScreen(
+          playback: playback,
+          storage: storage,
+          downloadService: download,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('UP NEXT (2)'), findsOneWidget);
+    expect(find.text('Up Next Song 1'), findsOneWidget);
+    expect(find.text('Up Next Song 2'), findsOneWidget);
+    expect(find.byType(ReorderableListView), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
+
