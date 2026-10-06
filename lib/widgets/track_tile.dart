@@ -1,11 +1,16 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../models/youtube_search_item.dart';
+import '../screens/audiobook_reader_screen.dart';
+import '../services/book_service.dart';
 import '../services/download_service.dart';
 import '../services/playback_controller.dart';
 import '../services/storage_service.dart';
 import 'add_to_playlist_dialog.dart';
 import 'animated_equalizer.dart';
+import 'attach_pdf_sheet.dart';
 import 'confirm_dialog.dart';
 
 class TrackTile extends StatelessWidget {
@@ -15,6 +20,7 @@ class TrackTile extends StatelessWidget {
     required this.playback,
     required this.storage,
     this.downloadService,
+    this.bookService,
     this.onTap,
     this.leadingWidget,
     this.trailingAction,
@@ -27,6 +33,7 @@ class TrackTile extends StatelessWidget {
   final PlaybackController playback;
   final StorageService storage;
   final DownloadService? downloadService;
+  final BookService? bookService;
   final VoidCallback? onTap;
   final Widget? leadingWidget;
   final IconData? trailingAction;
@@ -211,6 +218,14 @@ class TrackTile extends StatelessWidget {
                                   color: theme.colorScheme.outline,
                                 ),
                               ),
+                            if (storage.getTrackPdfPath(item.id) != null) ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.auto_stories,
+                                size: 13,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ],
                             if (downloadItem != null && downloadItem.hasPlaybackProgress) ...[
                               const SizedBox(width: 6),
                               Flexible(
@@ -365,9 +380,66 @@ class TrackTile extends StatelessWidget {
                               }
                             }
                             break;
+                          case 'read_pdf':
+                            final existingPdf = storage.getTrackPdfPath(item.id);
+                            if (existingPdf != null && File(existingPdf).existsSync()) {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => AudiobookReaderScreen(
+                                    item: item,
+                                    pdfPath: existingPdf,
+                                    playback: playback,
+                                    storage: storage,
+                                    downloadService: downloadService,
+                                    bookService: bookService,
+                                  ),
+                                ),
+                              );
+                            } else {
+                              final pickedPdf = await AttachPdfSheet.show(
+                                context,
+                                item: item,
+                                storage: storage,
+                                bookService: bookService,
+                              );
+                              if (pickedPdf != null && context.mounted) {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => AudiobookReaderScreen(
+                                      item: item,
+                                      pdfPath: pickedPdf,
+                                      playback: playback,
+                                      storage: storage,
+                                      downloadService: downloadService,
+                                      bookService: bookService,
+                                    ),
+                                  ),
+                                );
+                              }
+                            }
+                            break;
                         }
                       },
                       itemBuilder: (context) => [
+                        PopupMenuItem(
+                          value: 'read_pdf',
+                          child: ListTile(
+                            leading: Icon(
+                              storage.getTrackPdfPath(item.id) != null
+                                  ? Icons.auto_stories
+                                  : Icons.auto_stories_outlined,
+                              color: storage.getTrackPdfPath(item.id) != null
+                                  ? theme.colorScheme.primary
+                                  : null,
+                            ),
+                            title: Text(
+                              storage.getTrackPdfPath(item.id) != null
+                                  ? 'Read along (Book attached)'
+                                  : 'Read along (PDF)',
+                            ),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
                         const PopupMenuItem(
                           value: 'play',
                           child: ListTile(

@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/download_item.dart';
 import '../models/playlist.dart';
 import '../models/youtube_search_item.dart';
+import 'book_service.dart';
 
 class StorageService extends ChangeNotifier {
   File? _storageFile;
@@ -17,6 +18,9 @@ class StorageService extends ChangeNotifier {
   final List<Playlist> _playlists = [];
   final List<DownloadItem> _downloads = [];
   final List<String> _recentSearches = [];
+  final Map<String, String> _trackPdfs = {};
+  final Map<String, int> _trackPdfPages = {};
+  final Map<String, String> _pdfTitles = {};
   bool _autoplay = true;
   String _audioQuality = 'high'; // 'high' or 'saver'
   String _themeKey = 'emerald'; // 'emerald', 'cyan', 'amethyst', 'amber'
@@ -31,6 +35,53 @@ class StorageService extends ChangeNotifier {
   String get audioQuality => _audioQuality;
   String get themeKey => _themeKey;
   double get playbackSpeed => _playbackSpeed;
+  String? getTrackPdfPath(String trackId) => _trackPdfs[trackId];
+  int getTrackPdfPage(String trackId) => _trackPdfPages[trackId] ?? 0;
+  Map<String, String> get trackPdfs => Map.unmodifiable(_trackPdfs);
+  String? getPdfTitle(String filePath) => _pdfTitles[filePath];
+
+  /// Finds any existing PDF attached to another part or track in the library.
+  String? findMatchingPdfPath(String cleanTitleQuery) {
+    if (cleanTitleQuery.trim().isEmpty) return null;
+    final target = cleanTitleQuery.toLowerCase();
+
+    // Check all tracks in favorites, history, playlists
+    final allItems = <YoutubeSearchItem>[
+      ..._history,
+      ..._favorites,
+      for (final p in _playlists) ...p.items,
+    ];
+
+    for (final item in allItems) {
+      final path = _trackPdfs[item.id];
+      if (path != null && File(path).existsSync()) {
+        final otherClean = BookService.cleanAudiobookQuery(item.title).toLowerCase();
+        if (otherClean.isNotEmpty &&
+            (otherClean == target ||
+                otherClean.contains(target) ||
+                target.contains(otherClean))) {
+          final displayTitle = BookService.cleanAudiobookTitle(item.title);
+          _pdfTitles[path] = BookService.sanitizeBookTitle(
+            _pdfTitles[path],
+            fallbackTitle: displayTitle,
+          );
+          return path;
+        }
+      }
+    }
+
+    // Check by file names
+    for (final path in _trackPdfs.values) {
+      if (File(path).existsSync()) {
+        final name = path.split(Platform.pathSeparator).last.replaceAll('.pdf', '').toLowerCase();
+        if (name.contains(target) || target.contains(name)) {
+          return path;
+        }
+      }
+    }
+
+    return null;
+  }
   bool get isInitialized => _initialized;
 
   Future<void> init({File? overrideFile}) async {
@@ -113,6 +164,33 @@ class StorageService extends ChangeNotifier {
       if (data['playbackSpeed'] is num) {
         _playbackSpeed = (data['playbackSpeed'] as num).toDouble();
       }
+
+      _trackPdfs.clear();
+      if (data['trackPdfs'] is Map) {
+        (data['trackPdfs'] as Map).forEach((k, v) {
+          if (k is String && v is String) {
+            _trackPdfs[k] = v;
+          }
+        });
+      }
+
+      _trackPdfPages.clear();
+      if (data['trackPdfPages'] is Map) {
+        (data['trackPdfPages'] as Map).forEach((k, v) {
+          if (k is String && v is int) {
+            _trackPdfPages[k] = v;
+          }
+        });
+      }
+
+      _pdfTitles.clear();
+      if (data['pdfTitles'] is Map) {
+        (data['pdfTitles'] as Map).forEach((k, v) {
+          if (k is String && v is String) {
+            _pdfTitles[k] = v;
+          }
+        });
+      }
     } catch (e) {
       if (kDebugMode) debugPrint('Error loading storage: $e');
     }
@@ -133,6 +211,9 @@ class StorageService extends ChangeNotifier {
         'audioQuality': _audioQuality,
         'themeKey': _themeKey,
         'playbackSpeed': _playbackSpeed,
+        'trackPdfs': _trackPdfs,
+        'trackPdfPages': _trackPdfPages,
+        'pdfTitles': _pdfTitles,
       };
       await file.writeAsString(jsonEncode(data), flush: true);
     } catch (e) {
@@ -383,12 +464,51 @@ class StorageService extends ChangeNotifier {
     await _saveToDisk();
   }
 
+  Future<void> setTrackPdf(String trackId, String filePath, {String? title}) async {
+    _trackPdfs[trackId] = filePath;
+    if (title != null && title.trim().isNotEmpty) {
+      _pdfTitles[filePath] = BookService.sanitizeBookTitle(title);
+    }
+    notifyListeners();
+    await _saveToDisk();
+  }
+
+  Future<void> setPdfTitle(String filePath, String title) async {
+    if (title.trim().isEmpty) return;
+    _pdfTitles[filePath] = BookService.sanitizeBookTitle(title);
+    notifyListeners();
+    await _saveToDisk();
+  }
+
+  Future<void> purgePdf(String filePath) async {
+    _trackPdfs.removeWhere((_, path) => path == filePath);
+    _pdfTitles.remove(filePath);
+    notifyListeners();
+    await _saveToDisk();
+  }
+
+  Future<void> setTrackPdfPage(String trackId, int page) async {
+    if (_trackPdfPages[trackId] == page) return;
+    _trackPdfPages[trackId] = page;
+    await _saveToDisk();
+  }
+
+  Future<void> removeTrackPdf(String trackId) async {
+    _trackPdfs.remove(trackId);
+    _trackPdfPages.remove(trackId);
+    notifyListeners();
+    await _saveToDisk();
+  }
+
   Future<void> clearAllData() async {
     _favorites.clear();
     _history.clear();
     _playlists.clear();
     _downloads.clear();
     _recentSearches.clear();
+    _trackPdfs.clear();
+    _trackPdfPages.clear();
+    _pdfTitles.clear();
     _playbackSpeed = 1.0;
     notifyListeners();
     await _saveToDisk();

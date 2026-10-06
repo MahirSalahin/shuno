@@ -1,11 +1,15 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../screens/audiobook_reader_screen.dart';
+import '../services/book_service.dart';
 import '../services/download_service.dart';
 import '../services/playback_controller.dart';
 import '../services/storage_service.dart';
 import 'add_to_playlist_dialog.dart';
+import 'attach_pdf_sheet.dart';
 import 'confirm_dialog.dart';
 
 class FullPlayerSheet extends StatefulWidget {
@@ -14,12 +18,14 @@ class FullPlayerSheet extends StatefulWidget {
     required this.playback,
     required this.storage,
     this.downloadService,
+    this.bookService,
     this.onOpenQueue,
   });
 
   final PlaybackController playback;
   final StorageService storage;
   final DownloadService? downloadService;
+  final BookService? bookService;
   final VoidCallback? onOpenQueue;
 
   static void show(
@@ -27,6 +33,7 @@ class FullPlayerSheet extends StatefulWidget {
     required PlaybackController playback,
     required StorageService storage,
     DownloadService? downloadService,
+    BookService? bookService,
     VoidCallback? onOpenQueue,
   }) {
     showModalBottomSheet(
@@ -44,6 +51,7 @@ class FullPlayerSheet extends StatefulWidget {
           playback: playback,
           storage: storage,
           downloadService: downloadService,
+          bookService: bookService,
           onOpenQueue: onOpenQueue,
         ),
       ),
@@ -183,6 +191,50 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
     );
   }
 
+  Future<void> _openAudiobookReader(BuildContext context) async {
+    final item = widget.playback.selected;
+    if (item == null) return;
+
+    final existingPdf = widget.storage.getTrackPdfPath(item.id);
+    if (existingPdf != null && File(existingPdf).existsSync()) {
+      Navigator.of(context).pop();
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => AudiobookReaderScreen(
+            item: item,
+            pdfPath: existingPdf,
+            playback: widget.playback,
+            storage: widget.storage,
+            downloadService: widget.downloadService,
+            bookService: widget.bookService,
+          ),
+        ),
+      );
+    } else {
+      final pickedPdf = await AttachPdfSheet.show(
+        context,
+        item: item,
+        storage: widget.storage,
+        bookService: widget.bookService,
+      );
+      if (pickedPdf != null && context.mounted) {
+        Navigator.of(context).pop();
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => AudiobookReaderScreen(
+              item: item,
+              pdfPath: pickedPdf,
+              playback: widget.playback,
+              storage: widget.storage,
+              downloadService: widget.downloadService,
+              bookService: widget.bookService,
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   String _formatDuration(Duration duration) {
     final minutes = duration.inMinutes;
     final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
@@ -212,6 +264,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
     final isFav = storage.isFavorite(item.id);
     final isDownloaded = storage.isDownloaded(item.id);
     final isDownloading = downloadService?.isDownloading(item.id) ?? false;
+    final hasAttachedPdf = storage.getTrackPdfPath(item.id) != null;
     final duration = playback.duration > Duration.zero
         ? playback.duration
         : (item.duration ?? Duration.zero);
@@ -225,7 +278,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
     return SafeArea(
       child: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -245,44 +298,61 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
 
             // Header
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(width: 36, height: 36),
                   icon: const Icon(Icons.keyboard_arrow_down),
                   tooltip: 'Minimize',
                   onPressed: () => Navigator.of(context).pop(),
                 ),
-                Text(
-                  'NOW PLAYING',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    letterSpacing: 1.5,
-                    color: theme.colorScheme.onSurfaceVariant,
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'NOW PLAYING',
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      letterSpacing: 1.2,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
+                const SizedBox(width: 4),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Playback Speed Button Badge
                     IconButton(
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                       icon: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                         decoration: BoxDecoration(
                           border: Border.all(
                             color: playback.playbackSpeed != 1.0
                                 ? theme.colorScheme.primary
-                                : theme.colorScheme.outlineVariant,
+                                : theme.colorScheme.outlineVariant.withAlpha(140),
                             width: 1.2,
                           ),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(12),
                           color: playback.playbackSpeed != 1.0
                               ? theme.colorScheme.primary.withAlpha(35)
                               : Colors.transparent,
                         ),
                         child: Text(
-                          playback.playbackSpeed == 1.0 ? '1x' : '${playback.playbackSpeed}x',
+                          playback.playbackSpeed == 1.0
+                              ? '1x'
+                              : '${playback.playbackSpeed % 1 == 0 ? playback.playbackSpeed.toInt() : playback.playbackSpeed}x',
+                          maxLines: 1,
+                          softWrap: false,
                           style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.2,
                             color: playback.playbackSpeed != 1.0
                                 ? theme.colorScheme.primary
                                 : theme.colorScheme.onSurfaceVariant,
@@ -292,12 +362,35 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                       tooltip: 'Playback speed: ${playback.playbackSpeed}x',
                       onPressed: () => showSpeedPickerSheet(context, playback),
                     ),
+                    // Read Along (PDF / Book) Icon
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+                      icon: Icon(
+                        storage.getTrackPdfPath(item.id) != null
+                            ? Icons.auto_stories
+                            : Icons.auto_stories_outlined,
+                        size: 21,
+                        color: storage.getTrackPdfPath(item.id) != null
+                            ? theme.colorScheme.primary
+                            : null,
+                      ),
+                      tooltip: storage.getTrackPdfPath(item.id) != null
+                          ? 'Read along (PDF attached)'
+                          : 'Attach book (PDF)',
+                      onPressed: () => _openAudiobookReader(context),
+                    ),
                     // Sleep Timer Header Icon
                     IconButton(
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(width: 36, height: 36),
                       icon: Icon(
                         playback.hasSleepTimer
                             ? Icons.bedtime
                             : Icons.bedtime_outlined,
+                        size: 21,
                         color: playback.hasSleepTimer
                             ? theme.colorScheme.primary
                             : null,
@@ -309,7 +402,10 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                     ),
                     // Add to Playlist Icon
                     IconButton(
-                      icon: const Icon(Icons.playlist_add),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+                      icon: const Icon(Icons.playlist_add, size: 22),
                       tooltip: 'Add to playlist',
                       onPressed: () => AddToPlaylistDialog.show(
                         context,
@@ -617,15 +713,16 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
             ),
             const SizedBox(height: 12),
 
-            // Active Speed or Sleep Timer indicators
-            if (playback.hasSleepTimer || playback.playbackSpeed != 1.0)
+            // Active Speed, Sleep Timer, or Book indicators
+            if (playback.hasSleepTimer || playback.playbackSpeed != 1.0 || hasAttachedPdf)
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
-                    if (playback.playbackSpeed != 1.0) ...[
+                    if (playback.playbackSpeed != 1.0)
                       ActionChip(
                         avatar: Icon(
                           Icons.speed,
@@ -633,7 +730,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                           color: theme.colorScheme.primary,
                         ),
                         label: Text(
-                          'Speed: ${playback.playbackSpeed}x',
+                          'Speed: ${playback.playbackSpeed % 1 == 0 ? playback.playbackSpeed.toInt() : playback.playbackSpeed}x',
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: theme.colorScheme.primary,
                             fontWeight: FontWeight.w600,
@@ -642,8 +739,23 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                         visualDensity: VisualDensity.compact,
                         onPressed: () => showSpeedPickerSheet(context, playback),
                       ),
-                      if (playback.hasSleepTimer) const SizedBox(width: 8),
-                    ],
+                    if (hasAttachedPdf)
+                      ActionChip(
+                        avatar: Icon(
+                          Icons.auto_stories,
+                          size: 15,
+                          color: theme.colorScheme.primary,
+                        ),
+                        label: Text(
+                          'Book (p. ${storage.getTrackPdfPage(item.id) + 1})',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _openAudiobookReader(context),
+                      ),
                     if (playback.hasSleepTimer)
                       ActionChip(
                         avatar: Icon(

@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
+import '../services/book_service.dart';
 import '../services/download_service.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
@@ -237,6 +240,33 @@ class SettingsScreen extends StatelessWidget {
                     : null,
               ),
               const Divider(height: 1),
+              FutureBuilder<List<File>>(
+                future: BookService().getDownloadedBooks(),
+                builder: (context, snapshot) {
+                  final books = snapshot.data ?? [];
+                  final totalBookBytes = books.fold<int>(
+                    0,
+                    (sum, f) => sum + (f.existsSync() ? f.lengthSync() : 0),
+                  );
+                  final booksMB = (totalBookBytes / (1024 * 1024)).toStringAsFixed(1);
+                  return ListTile(
+                    leading: _buildIconBox(context, Icons.menu_book),
+                    title: const Text('Downloaded Books (PDFs)'),
+                    subtitle: Text('${books.length} books • $booksMB MB'),
+                    trailing: books.isNotEmpty
+                        ? TextButton(
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              textStyle: const TextStyle(fontSize: 12.5),
+                            ),
+                            onPressed: () => _showManageBooksModal(context),
+                            child: const Text('Manage'),
+                          )
+                        : null,
+                  );
+                },
+              ),
+              const Divider(height: 1),
               ListTile(
                 leading: _buildIconBox(context, Icons.history),
                 title: const Text('Play History'),
@@ -373,6 +403,170 @@ class SettingsScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Icon(icon, color: effectiveColor, size: 18),
+    );
+  }
+
+  void _showManageBooksModal(BuildContext context) {
+    final bookService = BookService();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (modalCtx, setModalState) {
+          final theme = Theme.of(ctx);
+          return FutureBuilder<List<File>>(
+            future: bookService.getDownloadedBooks(),
+            builder: (context, snapshot) {
+              final books = snapshot.data ?? [];
+              return SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'DOWNLOADED BOOKS (${books.length})',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                letterSpacing: 1.2,
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (books.isNotEmpty)
+                                  TextButton(
+                                    style: TextButton.styleFrom(
+                                      visualDensity: VisualDensity.compact,
+                                      foregroundColor: theme.colorScheme.error,
+                                    ),
+                                    onPressed: () async {
+                                      final confirm = await showConfirmDialog(
+                                        context,
+                                        title: 'Delete all books?',
+                                        message:
+                                            'This will remove all downloaded PDF books from your device to free storage space.',
+                                        confirmLabel: 'Delete All',
+                                      );
+                                      if (confirm) {
+                                        for (final b in books) {
+                                          await bookService.deleteDownloadedPdf(b.path);
+                                          await storage.purgePdf(b.path);
+                                        }
+                                        setModalState(() {});
+                                        if (ctx.mounted) Navigator.of(ctx).pop();
+                                      }
+                                    },
+                                    child: const Text('Clear All'),
+                                  ),
+                                IconButton(
+                                  icon: const Icon(Icons.close),
+                                  onPressed: () => Navigator.of(ctx).pop(),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      if (books.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(32),
+                          child: Center(child: Text('No downloaded books stored on device.')),
+                        )
+                      else
+                        Flexible(
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: books.length,
+                            separatorBuilder: (context, index) => const Divider(height: 1),
+                            itemBuilder: (itemCtx, index) {
+                              final file = books[index];
+                              final sizeBytes = file.existsSync() ? file.lengthSync() : 0;
+                              final mb = (sizeBytes / (1024 * 1024)).toStringAsFixed(1);
+                              final rawTitle = storage.getPdfTitle(file.path);
+                              final fallback = file.path
+                                  .split(Platform.pathSeparator)
+                                  .last
+                                  .replaceAll('.pdf', '')
+                                  .replaceAll('_', ' ');
+                              final savedTitle = BookService.sanitizeBookTitle(
+                                rawTitle,
+                                fallbackTitle: fallback,
+                              );
+
+                              return ListTile(
+                                leading: Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.primaryContainer.withAlpha(120),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    Icons.picture_as_pdf,
+                                    color: theme.colorScheme.primary,
+                                    size: 22,
+                                  ),
+                                ),
+                                title: Text(
+                                  savedTitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
+                                ),
+                                subtitle: Text(
+                                  '$mb MB • Stored locally',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                                trailing: IconButton(
+                                  icon: Icon(
+                                    Icons.delete_outline,
+                                    color: theme.colorScheme.error,
+                                    size: 20,
+                                  ),
+                                  tooltip: 'Delete from device',
+                                  onPressed: () async {
+                                    final confirm = await showConfirmDialog(
+                                      context,
+                                      title: 'Delete Book File?',
+                                      message:
+                                          'Delete "$savedTitle" from device storage? This will free up storage space.',
+                                      confirmLabel: 'Delete',
+                                    );
+                                    if (confirm) {
+                                      await bookService.deleteDownloadedPdf(file.path);
+                                      await storage.purgePdf(file.path);
+                                      setModalState(() {});
+                                    }
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }
