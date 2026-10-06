@@ -21,6 +21,7 @@ class FakeYoutubeService extends YoutubeService {
   final queries = <String>[];
   Completer<List<YoutubeSearchItem>> response = Completer();
   List<YoutubeChannelItem> channelsToReturn = [];
+  List<YoutubePlaylistItem> playlistsToReturn = [];
   List<YoutubeSearchItem> channelVideosToReturn = [];
   List<YoutubePlaylistItem> channelPlaylistsToReturn = [];
   List<YoutubeSearchItem> playlistTracksToReturn = [];
@@ -40,6 +41,10 @@ class FakeYoutubeService extends YoutubeService {
   @override
   Future<List<YoutubeChannelItem>> searchChannels(String query) async =>
       channelsToReturn;
+
+  @override
+  Future<List<YoutubePlaylistItem>> searchPlaylists(String query) async =>
+      playlistsToReturn;
 
   @override
   Future<List<YoutubeSearchItem>> getChannelVideos(
@@ -795,5 +800,53 @@ void main() {
     expect(find.text('Don\'t Panic'), findsOneWidget);
     expect(find.text('Shiver'), findsNothing);
   });
+
+  testWidgets('search includes playlists and tapping opens YoutubePlaylistDetailScreen', (
+    tester,
+  ) async {
+    final service = FakeYoutubeService();
+    service.playlistsToReturn = [
+      const YoutubePlaylistItem(
+        id: 'PL-123',
+        title: 'Coke Studio Season 14',
+        thumbnailUrl: '',
+        videoCount: 13,
+        author: 'Coke Studio',
+      ),
+    ];
+    service.playlistTracksToReturn = [
+      const YoutubeSearchItem(
+        id: 'track-ps1',
+        title: 'Pasoori',
+        channelName: 'Coke Studio',
+        thumbnailUrl: '',
+      ),
+    ];
+
+    await openSearch(tester, service);
+    await submit(tester, 'coke studio');
+    service.response.complete([sample]);
+    await tester.pumpAndSettle();
+
+    // Verify Playlists chip is available
+    expect(find.widgetWithText(ChoiceChip, 'Playlists'), findsOneWidget);
+
+    // Switch to Playlists tab
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Playlists'));
+    await tester.pumpAndSettle();
+
+    // Verify playlist item is rendered
+    expect(find.text('Coke Studio Season 14'), findsOneWidget);
+    expect(find.text('Coke Studio • 13 tracks'), findsOneWidget);
+
+    // Tap on playlist item
+    await tester.tap(find.text('Coke Studio Season 14'));
+    await tester.pumpAndSettle();
+
+    // Opens YoutubePlaylistDetailScreen and loads tracks
+    expect(find.byType(YoutubePlaylistDetailScreen), findsOneWidget);
+    expect(find.text('Pasoori'), findsOneWidget);
+  });
 }
+
 

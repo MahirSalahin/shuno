@@ -7,10 +7,12 @@ class ChannelPlaylistTile extends StatelessWidget {
     super.key,
     required this.playlist,
     required this.onTap,
+    this.showAuthor = false,
   });
 
   final YoutubePlaylistItem playlist;
   final VoidCallback onTap;
+  final bool showAuthor;
 
   @override
   Widget build(BuildContext context) {
@@ -75,10 +77,18 @@ class ChannelPlaylistTile extends StatelessWidget {
                         color: theme.colorScheme.primary,
                       ),
                       const SizedBox(width: 5),
-                      Text(
-                        playlist.videoCountLabel,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                      Expanded(
+                        child: Text(
+                          showAuthor &&
+                                  playlist.author != null &&
+                                  playlist.author!.trim().isNotEmpty
+                              ? '${playlist.author!.trim()} • ${playlist.videoCountLabel}'
+                              : playlist.videoCountLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     ],
@@ -109,3 +119,6 @@ class ChannelPlaylistTile extends StatelessWidget {
     );
   }
 }
+
+typedef YoutubePlaylistTile = ChannelPlaylistTile;
+

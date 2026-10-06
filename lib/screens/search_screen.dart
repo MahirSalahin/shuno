@@ -3,18 +3,21 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/youtube_channel_item.dart';
+import '../models/youtube_playlist_item.dart';
 import '../models/youtube_search_item.dart';
 import '../services/download_service.dart';
 import '../services/playback_controller.dart';
 import '../services/storage_service.dart';
 import '../services/youtube_service.dart';
+import '../widgets/channel_playlist_tile.dart';
 import '../widgets/channel_tile.dart';
 import '../widgets/confirm_dialog.dart';
 import '../widgets/playback_bar.dart';
 import '../widgets/track_tile.dart';
 import 'channel_detail_screen.dart';
+import 'youtube_playlist_detail_screen.dart';
 
-enum SearchCategory { tracks, channels }
+enum SearchCategory { tracks, playlists, channels }
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({
@@ -50,6 +53,7 @@ class _SearchScreenState extends State<SearchScreen> {
       widget.downloadService ?? DownloadService(storageService: _storage);
 
   List<YoutubeSearchItem> _results = [];
+  List<YoutubePlaylistItem> _playlistResults = [];
   List<YoutubeChannelItem> _channelResults = [];
   SearchCategory _selectedCategory = SearchCategory.tracks;
   bool _isLoading = false;
@@ -127,22 +131,29 @@ class _SearchScreenState extends State<SearchScreen> {
       _inputError = null;
       _searchError = null;
       _results = [];
+      _playlistResults = [];
       _channelResults = [];
       _selectedCategory = SearchCategory.tracks;
     });
 
     try {
-      final results = await _youtubeService.search(query);
-      List<YoutubeChannelItem> channels = [];
-      try {
-        channels = await _youtubeService.searchChannels(query);
-      } catch (_) {
-        // Channels fallback
-      }
+      final resultsFuture = _youtubeService.search(query);
+      final channelsFuture = _youtubeService
+          .searchChannels(query)
+          .catchError((_) => <YoutubeChannelItem>[]);
+      final playlistsFuture = _youtubeService
+          .searchPlaylists(query)
+          .catchError((_) => <YoutubePlaylistItem>[]);
+
+      final results = await resultsFuture;
+      final channels = await channelsFuture;
+      final playlists = await playlistsFuture;
+
       if (!mounted) return;
       setState(() {
         _results = results;
         _channelResults = channels;
+        _playlistResults = playlists;
       });
     } on TimeoutException {
       if (!mounted) return;
@@ -245,7 +256,9 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
             if (_hasSearched &&
                 !_isLoading &&
-                (_results.isNotEmpty || _channelResults.isNotEmpty))
+                (_results.isNotEmpty ||
+                    _playlistResults.isNotEmpty ||
+                    _channelResults.isNotEmpty))
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
@@ -262,6 +275,21 @@ class _SearchScreenState extends State<SearchScreen> {
                         }
                       },
                       avatar: const Icon(Icons.music_note, size: 16),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: const Text('Playlists'),
+                      selected: _selectedCategory == SearchCategory.playlists,
+                      showCheckmark: false,
+                      onSelected: (selected) {
+                        if (selected) {
+                          setState(
+                            () => _selectedCategory = SearchCategory.playlists,
+                          );
+                        }
+                      },
+                      avatar: const Icon(Icons.playlist_play, size: 16),
                       visualDensity: VisualDensity.compact,
                     ),
                     const SizedBox(width: 8),
@@ -391,11 +419,16 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
 
-    if (_results.isEmpty && _channelResults.isEmpty) {
+    if (_results.isEmpty &&
+        _playlistResults.isEmpty &&
+        _channelResults.isEmpty) {
       return const Center(
         child: SingleChildScrollView(
           padding: EdgeInsets.all(24),
-          child: Text('No videos found. Try a different search.', textAlign: TextAlign.center),
+          child: Text(
+            'No videos found. Try a different search.',
+            textAlign: TextAlign.center,
+          ),
         ),
       );
     }
@@ -405,7 +438,10 @@ class _SearchScreenState extends State<SearchScreen> {
         return const Center(
           child: Padding(
             padding: EdgeInsets.all(24),
-            child: Text('No tracks found for this search. Try the Channels tab.', textAlign: TextAlign.center),
+            child: Text(
+              'No tracks found for this search. Try the Playlists or Channels tab.',
+              textAlign: TextAlign.center,
+            ),
           ),
         );
       }
@@ -423,12 +459,52 @@ class _SearchScreenState extends State<SearchScreen> {
           );
         },
       );
+    } else if (_selectedCategory == SearchCategory.playlists) {
+      if (_playlistResults.isEmpty) {
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'No playlists found for this search. Try the Tracks or Channels tab.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        );
+      }
+      return ListView.builder(
+        padding: const EdgeInsets.only(bottom: 100),
+        itemCount: _playlistResults.length,
+        itemBuilder: (context, index) {
+          final playlist = _playlistResults[index];
+          return ChannelPlaylistTile(
+            key: ValueKey(playlist.id),
+            playlist: playlist,
+            showAuthor: true,
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => YoutubePlaylistDetailScreen(
+                    playlist: playlist,
+                    youtubeService: _youtubeService,
+                    playback: _playback,
+                    storage: _storage,
+                    downloadService: _downloadService,
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      );
     } else {
       if (_channelResults.isEmpty) {
         return const Center(
           child: Padding(
             padding: EdgeInsets.all(24),
-            child: Text('No channels found for this search. Try the Tracks tab.', textAlign: TextAlign.center),
+            child: Text(
+              'No channels found for this search. Try the Tracks or Playlists tab.',
+              textAlign: TextAlign.center,
+            ),
           ),
         );
       }

@@ -130,6 +130,36 @@ class YoutubeService {
     }
   }
 
+  Future<List<YoutubePlaylistItem>> searchPlaylists(String query) async {
+    final trimmedQuery = query.trim();
+    if (trimmedQuery.isEmpty) return [];
+
+    final youtube = YoutubeExplode();
+    try {
+      final results = await youtube.search
+          .searchContent(trimmedQuery, filter: TypeFilters.playlist)
+          .timeout(const Duration(seconds: 20));
+
+      return results
+          .whereType<SearchPlaylist>()
+          .map(
+            (pl) => YoutubePlaylistItem(
+              id: pl.id.value,
+              title: pl.title,
+              thumbnailUrl: pl.thumbnails.isNotEmpty
+                  ? pl.thumbnails.last.url.toString()
+                  : '',
+              videoCount: pl.videoCount >= 0 ? pl.videoCount : null,
+            ),
+          )
+          .toList();
+    } catch (_) {
+      return [];
+    } finally {
+      youtube.close();
+    }
+  }
+
   Future<YoutubeChannelItem?> getChannel(String channelId) async {
     if (channelId.trim().isEmpty) return null;
     final youtube = YoutubeExplode();
