@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -196,7 +195,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
     if (item == null) return;
 
     final existingPdf = widget.storage.getTrackPdfPath(item.id);
-    if (existingPdf != null && File(existingPdf).existsSync()) {
+    if (existingPdf != null && BookService.isPdfFileValid(existingPdf)) {
       Navigator.of(context).pop();
       Navigator.of(context).push(
         MaterialPageRoute(
@@ -211,13 +210,17 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
         ),
       );
     } else {
+      if (existingPdf != null) {
+        await widget.storage.removeTrackPdf(item.id);
+      }
+      if (!context.mounted) return;
       final pickedPdf = await AttachPdfSheet.show(
         context,
         item: item,
         storage: widget.storage,
         bookService: widget.bookService,
       );
-      if (pickedPdf != null && context.mounted) {
+      if (pickedPdf != null && context.mounted && BookService.isPdfFileValid(pickedPdf)) {
         Navigator.of(context).pop();
         Navigator.of(context).push(
           MaterialPageRoute(
@@ -264,7 +267,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
     final isFav = storage.isFavorite(item.id);
     final isDownloaded = storage.isDownloaded(item.id);
     final isDownloading = downloadService?.isDownloading(item.id) ?? false;
-    final hasAttachedPdf = storage.getTrackPdfPath(item.id) != null;
+    final hasAttachedPdf = BookService.isPdfFileValid(storage.getTrackPdfPath(item.id));
     final duration = playback.duration > Duration.zero
         ? playback.duration
         : (item.duration ?? Duration.zero);
@@ -368,15 +371,15 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints.tightFor(width: 36, height: 36),
                       icon: Icon(
-                        storage.getTrackPdfPath(item.id) != null
+                        hasAttachedPdf
                             ? Icons.auto_stories
                             : Icons.auto_stories_outlined,
                         size: 21,
-                        color: storage.getTrackPdfPath(item.id) != null
+                        color: hasAttachedPdf
                             ? theme.colorScheme.primary
                             : null,
                       ),
-                      tooltip: storage.getTrackPdfPath(item.id) != null
+                      tooltip: hasAttachedPdf
                           ? 'Read along (PDF attached)'
                           : 'Attach book (PDF)',
                       onPressed: () => _openAudiobookReader(context),

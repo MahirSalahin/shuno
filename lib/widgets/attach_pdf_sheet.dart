@@ -43,10 +43,15 @@ class AttachPdfSheet extends StatefulWidget {
 
 class _AttachPdfSheetState extends State<AttachPdfSheet> {
   late final _bookService = widget.bookService ?? BookService();
+  late final List<String> _candidateQueries =
+      BookService.extractSearchQueries(widget.item.title);
   late final _searchController = TextEditingController(
-    text: BookService.cleanAudiobookQuery(widget.item.title),
+    text: _candidateQueries.isNotEmpty
+        ? _candidateQueries.first
+        : BookService.cleanAudiobookQuery(widget.item.title),
   );
 
+  int _selectedChipIndex = -1; // -1 means "All Matches"
   List<ArchiveBookItem> _archiveResults = [];
   Set<String> _downloadedArchiveIds = {};
   List<File> _downloadedFiles = [];
@@ -54,21 +59,35 @@ class _AttachPdfSheetState extends State<AttachPdfSheet> {
   String? _suggestedPdfName;
   bool _isSearching = false;
   String? _downloadingId;
-  double _downloadProgress = 0.0;
   String? _statusMessage;
 
   @override
   void initState() {
     super.initState();
+    _bookService.addListener(_onBookServiceChanged);
     _loadDownloadedFiles();
     _findSuggestedPdf();
-    _performSearch();
+    _performInitialSearch();
   }
 
   @override
   void dispose() {
+    _bookService.removeListener(_onBookServiceChanged);
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onBookServiceChanged() {
+    if (!mounted) return;
+    setState(() {});
+
+    if (_downloadingId != null) {
+      final task = _bookService.getDownloadTask(_downloadingId!);
+      if (task != null && task.isCompleted && task.savedPath != null) {
+        // Auto-open reader if sheet is still open in foreground!
+        Navigator.of(context).pop(task.savedPath);
+      }
+    }
   }
 
   Future<void> _loadDownloadedFiles() async {
@@ -86,7 +105,7 @@ class _AttachPdfSheetState extends State<AttachPdfSheet> {
 
     // 1. Check if another track/part in the library has a matching PDF
     final matchingStoragePath = widget.storage.findMatchingPdfPath(cleanQuery);
-    if (matchingStoragePath != null && File(matchingStoragePath).existsSync()) {
+    if (matchingStoragePath != null && BookService.isPdfFileValid(matchingStoragePath)) {
       if (mounted) {
         final rawTitle = widget.storage.getPdfTitle(matchingStoragePath);
         final relevantTitle = BookService.sanitizeBookTitle(
@@ -136,8 +155,25 @@ class _AttachPdfSheetState extends State<AttachPdfSheet> {
     }
   }
 
-  Future<void> _performSearch() async {
-    final query = _searchController.text.trim();
+  Future<void> _performInitialSearch() async {
+    setState(() {
+      _isSearching = true;
+      _statusMessage = null;
+    });
+
+    List<ArchiveBookItem> results;
+    if (_candidateQueries.isNotEmpty) {
+      results = await _bookService.searchArchiveMulti(_candidateQueries);
+    } else {
+      results = await _bookService.searchArchive(_searchController.text);
+    }
+
+    if (!mounted) return;
+    await _processSearchResults(results);
+  }
+
+  Future<void> _performSearch([String? specificQuery]) async {
+    final query = (specificQuery ?? _searchController.text).trim();
     if (query.isEmpty) return;
 
     setState(() {
@@ -147,7 +183,10 @@ class _AttachPdfSheetState extends State<AttachPdfSheet> {
 
     final results = await _bookService.searchArchive(query);
     if (!mounted) return;
+    await _processSearchResults(results);
+  }
 
+  Future<void> _processSearchResults(List<ArchiveBookItem> results) async {
     final downloaded = <String>{};
     for (final book in results) {
       final path = await _bookService.getDownloadedPdfPath(book.id);
@@ -162,7 +201,8 @@ class _AttachPdfSheetState extends State<AttachPdfSheet> {
       _downloadedArchiveIds = downloaded;
       _isSearching = false;
       if (results.isEmpty) {
-        _statusMessage = 'No matching books found on Internet Archive. Try editing the search or pick from your device.';
+        _statusMessage =
+            'No matching books found on Internet Archive. Try tapping another keyword chip or pick from your device.';
       }
     });
   }
@@ -190,7 +230,7 @@ class _AttachPdfSheetState extends State<AttachPdfSheet> {
   }
 
   Future<void> _downloadAndAttach(ArchiveBookItem book) async {
-    if (_downloadingId != null) return;
+    if (_bookService.isDownloading(book.id)) return;
 
     // Instant reuse: Check if already downloaded on disk!
     final existingLocal = await _bookService.getDownloadedPdfPath(book.id);
@@ -205,45 +245,26 @@ class _AttachPdfSheetState extends State<AttachPdfSheet> {
 
     setState(() {
       _downloadingId = book.id;
-      _downloadProgress = 0.0;
     });
 
-    final pdfUrl = await _bookService.resolvePdfUrl(book.id);
-    if (pdfUrl == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not find PDF link for this book.')),
-        );
-        setState(() => _downloadingId = null);
-      }
-      return;
-    }
-
-    // Save with canonical book identifier to prevent duplicate downloads across parts
-    final savedPath = await _bookService.downloadPdf(
-      pdfUrl,
-      book.id,
-      onProgress: (p) {
-        if (mounted) {
-          setState(() => _downloadProgress = p);
-        }
-      },
-    );
-
-    if (savedPath != null && mounted) {
-      await _loadDownloadedFiles();
-      final relevantTitle = BookService.sanitizeBookTitle(
-        book.title,
-        fallbackTitle: BookService.cleanAudiobookTitle(widget.item.title),
-      );
-      await _attachLocalPath(savedPath, title: relevantTitle);
-    } else if (mounted) {
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to download PDF. Please try again.')),
+        SnackBar(
+          content: Text('Downloading "${BookService.sanitizeBookTitle(book.title)}" in background...'),
+          duration: const Duration(seconds: 2),
+        ),
       );
-      setState(() => _downloadingId = null);
     }
+
+    // Launch robust background download
+    await _bookService.startBackgroundDownload(
+      book: book,
+      targetTrackId: widget.item.id,
+      fallbackSeriesTitle: BookService.cleanAudiobookTitle(widget.item.title),
+      storage: widget.storage,
+    );
   }
+
 
   void _showSavedPdfsModal() {
     showModalBottomSheet(
@@ -548,17 +569,23 @@ class _AttachPdfSheetState extends State<AttachPdfSheet> {
 
           // Search bar for Internet Archive
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
             child: TextField(
               controller: _searchController,
               textInputAction: TextInputAction.search,
-              onSubmitted: (_) => _performSearch(),
+              onSubmitted: (val) {
+                setState(() => _selectedChipIndex = -2);
+                _performSearch(val);
+              },
               decoration: InputDecoration(
                 hintText: 'Search Internet Archive books…',
                 prefixIcon: const Icon(Icons.search, size: 20),
                 suffixIcon: IconButton(
                   icon: const Icon(Icons.arrow_forward, size: 20),
-                  onPressed: _performSearch,
+                  onPressed: () {
+                    setState(() => _selectedChipIndex = -2);
+                    _performSearch();
+                  },
                 ),
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -568,6 +595,75 @@ class _AttachPdfSheetState extends State<AttachPdfSheet> {
               ),
             ),
           ),
+
+          // Suggestion Chips (Transliterated, Bengali, English variations)
+          if (_candidateQueries.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: SizedBox(
+                height: 36,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: FilterChip(
+                        avatar: Icon(
+                          Icons.auto_awesome,
+                          size: 14,
+                          color: _selectedChipIndex == -1
+                              ? theme.colorScheme.onPrimaryContainer
+                              : theme.colorScheme.primary,
+                        ),
+                        label: Text(
+                          _archiveResults.isNotEmpty && _selectedChipIndex == -1
+                              ? 'All Matches (${_archiveResults.length})'
+                              : 'All Matches',
+                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+                        ),
+                        selected: _selectedChipIndex == -1,
+                        showCheckmark: false,
+                        visualDensity: VisualDensity.compact,
+                        onSelected: (selected) {
+                          setState(() {
+                            _selectedChipIndex = -1;
+                            _searchController.text = _candidateQueries.first;
+                          });
+                          _performInitialSearch();
+                        },
+                      ),
+                    ),
+                    for (int i = 0; i < _candidateQueries.length; i++)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: FilterChip(
+                          label: Text(
+                            _candidateQueries[i],
+                            style: const TextStyle(fontSize: 11.5),
+                          ),
+                          selected: _selectedChipIndex == i,
+                          showCheckmark: false,
+                          visualDensity: VisualDensity.compact,
+                          onSelected: (selected) {
+                            setState(() {
+                              _selectedChipIndex = selected ? i : -1;
+                              if (selected) {
+                                _searchController.text = _candidateQueries[i];
+                              }
+                            });
+                            if (selected) {
+                              _performSearch(_candidateQueries[i]);
+                            } else {
+                              _performInitialSearch();
+                            }
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
 
           // Results header
           Padding(
@@ -633,7 +729,8 @@ class _AttachPdfSheetState extends State<AttachPdfSheet> {
       separatorBuilder: (context, index) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final book = _archiveResults[index];
-        final isDownloading = _downloadingId == book.id;
+        final isDownloading = _bookService.isDownloading(book.id) || _downloadingId == book.id;
+        final downloadProgress = _bookService.getDownloadProgress(book.id);
         final isCached = _downloadedArchiveIds.contains(book.id);
 
         return ListTile(
@@ -698,12 +795,12 @@ class _AttachPdfSheetState extends State<AttachPdfSheet> {
                     alignment: Alignment.center,
                     children: [
                       CircularProgressIndicator(
-                        value: _downloadProgress > 0 ? _downloadProgress : null,
+                        value: downloadProgress > 0 ? downloadProgress : null,
                         strokeWidth: 3,
                       ),
-                      if (_downloadProgress > 0)
+                      if (downloadProgress > 0)
                         Text(
-                          '${(_downloadProgress * 100).toInt()}%',
+                          '${(downloadProgress * 100).toInt()}%',
                           style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold),
                         ),
                     ],
@@ -711,7 +808,7 @@ class _AttachPdfSheetState extends State<AttachPdfSheet> {
                 )
               : isCached
               ? FilledButton.tonal(
-                  onPressed: _downloadingId != null ? null : () => _downloadAndAttach(book),
+                  onPressed: () => _downloadAndAttach(book),
                   style: FilledButton.styleFrom(
                     backgroundColor: theme.colorScheme.primary.withAlpha(35),
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -734,7 +831,7 @@ class _AttachPdfSheetState extends State<AttachPdfSheet> {
                   ),
                 )
               : FilledButton.tonal(
-                  onPressed: _downloadingId != null ? null : () => _downloadAndAttach(book),
+                  onPressed: () => _downloadAndAttach(book),
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     visualDensity: VisualDensity.compact,

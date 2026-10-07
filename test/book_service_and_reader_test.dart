@@ -9,7 +9,7 @@ import 'package:shuno/services/book_service.dart';
 import 'package:shuno/services/storage_service.dart';
 
 void main() {
-  group('BookService Query Cleaning', () {
+  group('BookService Query Cleaning & Extraction', () {
     test('cleans common YouTube audiobook title noise and tags', () {
       expect(
         BookService.cleanAudiobookQuery('Brave New World [Full Audiobook] HQ'),
@@ -20,7 +20,7 @@ void main() {
         BookService.cleanAudiobookQuery(
           'Crime and Punishment - Fyodor Dostoevsky (Part 1 of 2)',
         ),
-        'Crime and Punishment Fyodor Dostoevsky',
+        'Crime and Punishment',
       );
 
       expect(
@@ -36,8 +36,37 @@ void main() {
       // Bengali audiobook title with Bengali digits
       expect(
         BookService.cleanAudiobookQuery('শবনম ৫/৮ | সৈয়দ মুজতবা আলী | Syed Mujtaba Ali'),
-        'শবনম সৈয়দ মুজতবা আলী Syed Mujtaba Ali',
+        'শবনম',
       );
+    });
+
+    test('extractSearchQueries extracts robust multi-query candidates for Bengali audiobook', () {
+      const title = 'গাভী বিত্তান্ত 1/6 | আহমদ ছফা | Ahmed Sofa | Golpokothon by Kollol';
+      final queries = BookService.extractSearchQueries(title);
+
+      // Must include primary title
+      expect(queries, contains('গাভী বিত্তান্ত'));
+      // Must include Bengali title + Bengali author
+      expect(queries, contains('গাভী বিত্তান্ত আহমদ ছফা'));
+      // Must include Bengali title + English author
+      expect(queries, contains('গাভী বিত্তান্ত Ahmed Sofa'));
+      // Must include transliterated title
+      expect(queries, contains('gabhi bittanto'));
+      // Must include transliterated title + English author
+      expect(queries, contains('gabhi bittanto Ahmed Sofa'));
+
+      // Must discard narrator noise 'Golpokothon by Kollol'
+      for (final q in queries) {
+        expect(q.toLowerCase().contains('golpokothon'), isFalse);
+        expect(q.toLowerCase().contains('by kollol'), isFalse);
+      }
+    });
+
+    test('transliterateBengali correctly maps Bengali script to Latin letters', () {
+      expect(BookService.transliterateBengali('গাভী বিত্তান্ত'), 'gabhi bittanto');
+      expect(BookService.transliterateBengali('পথের পাঁচালী'), 'pather panchali');
+      expect(BookService.transliterateBengali('শবনম'), 'shabanam');
+      expect(BookService.transliterateBengali('হিমু'), 'himu');
     });
 
     test('cleanAudiobookTitle formats clean human-readable series title', () {
@@ -143,9 +172,25 @@ void main() {
 
       expect(matchingPath, part1Pdf);
     });
+
+    test('isPdfFileValid validates complete PDF files and rejects stubs', () async {
+      expect(BookService.isPdfFileValid(null), isFalse);
+      expect(BookService.isPdfFileValid(''), isFalse);
+      expect(BookService.isPdfFileValid('${tempDir.path}/nonexistent.pdf'), isFalse);
+
+      // Tiny stub file (100 bytes) -> invalid
+      final stubFile = File('${tempDir.path}/stub.pdf');
+      await stubFile.writeAsBytes(List.filled(100, 0));
+      expect(BookService.isPdfFileValid(stubFile.path), isFalse);
+
+      // Valid PDF size (100 KB) -> valid
+      final validFile = File('${tempDir.path}/valid.pdf');
+      await validFile.writeAsBytes(List.filled(100 * 1024, 0));
+      expect(BookService.isPdfFileValid(validFile.path), isTrue);
+    });
   });
 
-  group('BookService Internet Archive API Mocking', () {
+  group('BookService Internet Archive API Mocking & Multi-Search', () {
     test('searchArchive parses Internet Archive items correctly', () async {
       final mockClient = MockClient((request) async {
         if (request.url.toString().contains('advancedsearch.php')) {
@@ -175,6 +220,51 @@ void main() {
       expect(results.first.id, 'bravenewworld00huxl');
       expect(results.first.title, 'Brave New World');
       expect(results.first.creator, 'Aldous Huxley');
+    });
+
+    test('searchArchiveMulti merges and deduplicates results across candidate queries', () async {
+      final mockClient = MockClient((request) async {
+        final queryParam = request.url.queryParameters['q'] ?? '';
+        final docs = <Map<String, dynamic>>[];
+
+        if (queryParam.contains('গাভী বিত্তান্ত')) {
+          docs.add({
+            'identifier': 'gavibittanto01',
+            'title': 'গাভী বিত্তান্ত',
+            'creator': 'আহমদ ছফা',
+          });
+        }
+        if (queryParam.contains('gabhi bittanto')) {
+          docs.add({
+            'identifier': 'gavibittanto01', // duplicate ID
+            'title': 'গাভী বিত্তান্ত',
+            'creator': 'আহমদ ছফা',
+          });
+          docs.add({
+            'identifier': 'gabi_edition_english',
+            'title': 'Gabhi Bittanto (English Translit)',
+            'creator': 'Ahmed Sofa',
+          });
+        }
+
+        return http.Response(
+          jsonEncode({
+            'response': {'docs': docs}
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+
+      final service = BookService(httpClient: mockClient);
+      final results = await service.searchArchiveMulti([
+        'গাভী বিত্তান্ত',
+        'gabhi bittanto',
+      ]);
+
+      // Should contain 2 items after deduplicating gavibittanto01
+      expect(results.length, 2);
+      expect(results.map((b) => b.id).toSet(), {'gavibittanto01', 'gabi_edition_english'});
     });
 
     test('resolvePdfUrl resolves direct PDF download link from metadata', () async {
@@ -209,6 +299,12 @@ void main() {
         pdfUrl,
         'https://archive.org/download/bravenewworld00huxl/bravenewworld00huxl.pdf',
       );
+    });
+
+    test('BookService manages background download tasks state', () {
+      final service = BookService();
+      expect(service.isDownloading('test_book_id'), isFalse);
+      expect(service.getDownloadProgress('test_book_id'), 0.0);
     });
   });
 }

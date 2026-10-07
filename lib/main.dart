@@ -9,6 +9,8 @@ import 'services/storage_service.dart';
 import 'services/youtube_service.dart';
 import 'theme/app_theme.dart';
 
+final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -74,6 +76,7 @@ class ShunoApp extends StatelessWidget {
       builder: (context, _) {
         final palette = AppPalette.fromId(storage.themeKey);
         return MaterialApp(
+          scaffoldMessengerKey: rootScaffoldMessengerKey,
           title: 'Shuno',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.buildTheme(palette),
@@ -88,3 +91,4 @@ class ShunoApp extends StatelessWidget {
     );
   }
 }
+

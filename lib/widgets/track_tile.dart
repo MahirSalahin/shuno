@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../models/youtube_search_item.dart';
@@ -218,7 +216,7 @@ class TrackTile extends StatelessWidget {
                                   color: theme.colorScheme.outline,
                                 ),
                               ),
-                            if (storage.getTrackPdfPath(item.id) != null) ...[
+                            if (BookService.isPdfFileValid(storage.getTrackPdfPath(item.id))) ...[
                               const SizedBox(width: 4),
                               Icon(
                                 Icons.auto_stories,
@@ -382,7 +380,7 @@ class TrackTile extends StatelessWidget {
                             break;
                           case 'read_pdf':
                             final existingPdf = storage.getTrackPdfPath(item.id);
-                            if (existingPdf != null && File(existingPdf).existsSync()) {
+                            if (existingPdf != null && BookService.isPdfFileValid(existingPdf)) {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
                                   builder: (_) => AudiobookReaderScreen(
@@ -396,13 +394,17 @@ class TrackTile extends StatelessWidget {
                                 ),
                               );
                             } else {
+                              if (existingPdf != null) {
+                                await storage.removeTrackPdf(item.id);
+                              }
+                              if (!context.mounted) return;
                               final pickedPdf = await AttachPdfSheet.show(
                                 context,
                                 item: item,
                                 storage: storage,
                                 bookService: bookService,
                               );
-                              if (pickedPdf != null && context.mounted) {
+                              if (pickedPdf != null && context.mounted && BookService.isPdfFileValid(pickedPdf)) {
                                 Navigator.of(context).push(
                                   MaterialPageRoute(
                                     builder: (_) => AudiobookReaderScreen(
@@ -425,15 +427,15 @@ class TrackTile extends StatelessWidget {
                           value: 'read_pdf',
                           child: ListTile(
                             leading: Icon(
-                              storage.getTrackPdfPath(item.id) != null
+                              BookService.isPdfFileValid(storage.getTrackPdfPath(item.id))
                                   ? Icons.auto_stories
                                   : Icons.auto_stories_outlined,
-                              color: storage.getTrackPdfPath(item.id) != null
+                              color: BookService.isPdfFileValid(storage.getTrackPdfPath(item.id))
                                   ? theme.colorScheme.primary
                                   : null,
                             ),
                             title: Text(
-                              storage.getTrackPdfPath(item.id) != null
+                              BookService.isPdfFileValid(storage.getTrackPdfPath(item.id))
                                   ? 'Read along (Book attached)'
                                   : 'Read along (PDF)',
                             ),
