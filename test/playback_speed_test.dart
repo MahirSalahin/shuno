@@ -17,6 +17,9 @@ class MockYoutubeService extends Fake implements YoutubeService {
   Future<Uri> resolveAudioUrl(String videoId, {bool highQuality = true}) async {
     return Uri.parse('https://example.com/audio/$videoId.mp4');
   }
+
+  @override
+  void clearCachedUrl(String videoId) {}
 }
 
 void main() {

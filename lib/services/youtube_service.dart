@@ -31,16 +31,88 @@ class ChannelPlaylistsPage {
   final String? continuation;
 }
 
+class _CachedStreamUrl {
+  const _CachedStreamUrl({
+    required this.url,
+    required this.expiresAt,
+  });
+
+  final Uri url;
+  final DateTime expiresAt;
+
+  bool get isExpired => DateTime.now().isAfter(expiresAt);
+}
+
+class _CachedSearchResult {
+  const _CachedSearchResult({
+    required this.items,
+    required this.timestamp,
+  });
+
+  final List<YoutubeSearchItem> items;
+  final DateTime timestamp;
+
+  bool get isExpired =>
+      DateTime.now().difference(timestamp) > const Duration(minutes: 10);
+}
+
 class YoutubeService {
   YoutubeExplode? _client;
   YoutubeExplode get _yt => _client ??= YoutubeExplode();
 
+  final Map<String, _CachedStreamUrl> _streamUrlCache = {};
+  final Map<String, _CachedSearchResult> _searchCache = {};
+
   void dispose() {
+    _streamUrlCache.clear();
+    _searchCache.clear();
     _client?.close();
     _client = null;
   }
 
+  void clearCachedUrl(String videoId) {
+    _streamUrlCache.remove('$videoId-true');
+    _streamUrlCache.remove('$videoId-false');
+  }
+
+  @visibleForTesting
+  bool hasCachedUrl(String videoId, {bool highQuality = true}) {
+    final cached = _streamUrlCache['$videoId-$highQuality'];
+    return cached != null && !cached.isExpired;
+  }
+
+  Uri _cacheResolvedUrl(String cacheKey, Uri url) {
+    DateTime expiresAt;
+    final expireParam = url.queryParameters['expire'];
+    final expireSeconds = expireParam != null ? int.tryParse(expireParam) : null;
+    if (expireSeconds != null) {
+      // 15-minute buffer before expiration
+      expiresAt = DateTime.fromMillisecondsSinceEpoch(expireSeconds * 1000)
+          .subtract(const Duration(minutes: 15));
+      if (expiresAt.difference(DateTime.now()).inMinutes < 5) {
+        expiresAt = DateTime.now().add(const Duration(hours: 2));
+      }
+    } else {
+      expiresAt = DateTime.now().add(const Duration(hours: 2));
+    }
+
+    if (_streamUrlCache.length >= 50) {
+      _streamUrlCache.remove(_streamUrlCache.keys.first);
+    }
+    _streamUrlCache[cacheKey] = _CachedStreamUrl(
+      url: url,
+      expiresAt: expiresAt,
+    );
+    return url;
+  }
+
   Future<Uri> resolveAudioUrl(String videoId, {bool highQuality = true}) async {
+    final cacheKey = '$videoId-$highQuality';
+    final cached = _streamUrlCache[cacheKey];
+    if (cached != null && !cached.isExpired) {
+      return cached.url;
+    }
+
     final youtube = _yt;
     StreamManifest manifest;
     try {
@@ -66,12 +138,12 @@ class YoutubeService {
     // Prioritize Stream 18 (universal 360p MP4 with AAC stereo audio, ratebypass=yes, unthrottled)
     final stream18 = manifest.muxed.where((s) => s.tag == 18).firstOrNull;
     if (stream18 != null) {
-      return stream18.url;
+      return _cacheResolvedUrl(cacheKey, stream18.url);
     }
 
     if (manifest.audioOnly.isEmpty) {
       if (manifest.muxed.isNotEmpty) {
-        return manifest.muxed.first.url;
+        return _cacheResolvedUrl(cacheKey, manifest.muxed.first.url);
       }
       throw StateError('This video has no playable audio stream.');
     }
@@ -82,34 +154,46 @@ class YoutubeService {
     final stream = highQuality
         ? pool.withHighestBitrate()
         : (pool.length > 1 ? pool.elementAt(pool.length ~/ 2) : pool.first);
-    return stream.url;
+    return _cacheResolvedUrl(cacheKey, stream.url);
   }
 
   Future<List<YoutubeSearchItem>> search(String query) async {
     final trimmedQuery = query.trim();
     if (trimmedQuery.isEmpty) return [];
 
-    final youtube = YoutubeExplode();
-    try {
-      final results = await youtube.search
-          .searchContent(trimmedQuery, filter: TypeFilters.video)
-          .timeout(const Duration(seconds: 20));
-
-      return results
-          .whereType<SearchVideo>()
-          .map(
-            (video) => YoutubeSearchItem(
-              id: video.id.value,
-              title: video.title,
-              channelName: video.author,
-              thumbnailUrl: ThumbnailSet(video.id.value).mediumResUrl,
-              duration: _parseDuration(video.duration),
-            ),
-          )
-          .toList();
-    } finally {
-      youtube.close();
+    final cacheKey = trimmedQuery.toLowerCase();
+    final cached = _searchCache[cacheKey];
+    if (cached != null && !cached.isExpired) {
+      return cached.items;
     }
+
+    final youtube = _yt;
+    final results = await youtube.search
+        .searchContent(trimmedQuery, filter: TypeFilters.video)
+        .timeout(const Duration(seconds: 20));
+
+    final items = results
+        .whereType<SearchVideo>()
+        .map(
+          (video) => YoutubeSearchItem(
+            id: video.id.value,
+            title: video.title,
+            channelName: video.author,
+            thumbnailUrl: ThumbnailSet(video.id.value).mediumResUrl,
+            duration: _parseDuration(video.duration),
+          ),
+        )
+        .toList();
+
+    if (_searchCache.length >= 25) {
+      _searchCache.remove(_searchCache.keys.first);
+    }
+    _searchCache[cacheKey] = _CachedSearchResult(
+      items: List.unmodifiable(items),
+      timestamp: DateTime.now(),
+    );
+
+    return items;
   }
 
   Future<List<YoutubeChannelItem>> searchChannels(String query) async {
@@ -121,7 +205,7 @@ class YoutubeService {
       if (scraped.isNotEmpty) return scraped;
     } catch (_) {}
 
-    final youtube = YoutubeExplode();
+    final youtube = _yt;
     try {
       final results = await youtube.search
           .searchContent(trimmedQuery, filter: TypeFilters.channel)
@@ -143,8 +227,6 @@ class YoutubeService {
           .toList();
     } catch (_) {
       return [];
-    } finally {
-      youtube.close();
     }
   }
 
@@ -169,7 +251,7 @@ class YoutubeService {
     final trimmedQuery = query.trim();
     if (trimmedQuery.isEmpty) return [];
 
-    final youtube = YoutubeExplode();
+    final youtube = _yt;
     try {
       final results = await youtube.search
           .searchContent(trimmedQuery, filter: TypeFilters.playlist)
@@ -190,14 +272,12 @@ class YoutubeService {
           .toList();
     } catch (_) {
       return [];
-    } finally {
-      youtube.close();
     }
   }
 
   Future<YoutubeChannelItem?> getChannel(String channelId) async {
     if (channelId.trim().isEmpty) return null;
-    final youtube = YoutubeExplode();
+    final youtube = _yt;
     try {
       final channel = await youtube.channels
           .get(channelId)
@@ -210,8 +290,6 @@ class YoutubeService {
       );
     } catch (_) {
       return null;
-    } finally {
-      youtube.close();
     }
   }
 

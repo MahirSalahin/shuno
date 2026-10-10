@@ -408,6 +408,7 @@ class PlaybackController extends ChangeNotifier {
     } catch (error, stack) {
       if (_disposed || request != _request) return;
       debugPrint('Audio load failed: $error\n$stack');
+      _youtubeService.clearCachedUrl(item.id);
       final errStr = error.toString();
       _error = errStr.contains('403')
           ? 'YouTube restricted playback for this video (403). Try another video.'
