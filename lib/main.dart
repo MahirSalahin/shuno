@@ -48,7 +48,7 @@ Future<void> main() async {
   );
 }
 
-class ShunoApp extends StatelessWidget {
+class ShunoApp extends StatefulWidget {
   const ShunoApp({
     super.key,
     this.youtubeService,
@@ -63,19 +63,50 @@ class ShunoApp extends StatelessWidget {
   final DownloadService? downloadService;
 
   @override
-  Widget build(BuildContext context) {
-    final storage = storageService ?? StorageService();
-    final youtube = youtubeService ?? YoutubeService();
-    final playback =
-        playbackController ??
-        PlaybackController(
-          youtubeService: youtube,
-          storageService: storage,
-        );
-    final download = downloadService ?? DownloadService(storageService: storage);
+  State<ShunoApp> createState() => _ShunoAppState();
+}
 
+class _ShunoAppState extends State<ShunoApp> with WidgetsBindingObserver {
+  late final StorageService _storage;
+  late final YoutubeService _youtube;
+  late final PlaybackController _playback;
+  late final DownloadService _download;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _storage = widget.storageService ?? StorageService();
+    _youtube = widget.youtubeService ?? YoutubeService();
+    _playback = widget.playbackController ??
+        PlaybackController(
+          youtubeService: _youtube,
+          storageService: _storage,
+        );
+    _download =
+        widget.downloadService ?? DownloadService(storageService: _storage);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_storage.flushPendingSave());
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      unawaited(_storage.flushPendingSave());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return ValueListenableBuilder<String>(
-      valueListenable: storage.themeNotifier,
+      valueListenable: _storage.themeNotifier,
       builder: (context, themeKey, _) {
         final palette = AppPalette.fromId(themeKey);
         return MaterialApp(
@@ -84,10 +115,10 @@ class ShunoApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           theme: AppTheme.buildTheme(palette),
           home: HomeNavigationScreen(
-            youtubeService: youtube,
-            storageService: storage,
-            playbackController: playback,
-            downloadService: download,
+            youtubeService: _youtube,
+            storageService: _storage,
+            playbackController: _playback,
+            downloadService: _download,
           ),
         );
       },

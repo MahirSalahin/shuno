@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -10,8 +11,23 @@ import '../models/youtube_search_item.dart';
 import 'book_service.dart';
 
 class StorageService extends ChangeNotifier {
+  StorageService({Duration? debounceDuration})
+      : _debounceDuration = debounceDuration ??
+            (Platform.environment.containsKey('FLUTTER_TEST')
+                ? Duration.zero
+                : const Duration(milliseconds: 500));
+
   File? _storageFile;
   bool _initialized = false;
+  Timer? _saveTimer;
+  Completer<void>? _saveCompleter;
+  Duration _debounceDuration;
+
+  @visibleForTesting
+  set debounceDuration(Duration duration) => _debounceDuration = duration;
+
+  @visibleForTesting
+  bool get hasPendingSave => _saveTimer != null;
 
   final List<YoutubeSearchItem> _favorites = [];
   final List<YoutubeSearchItem> _history = [];
@@ -56,7 +72,7 @@ class StorageService extends ChangeNotifier {
       final matching = findMatchingPdfPath(cleanQuery);
       if (matching != null) {
         _trackPdfs[trackId] = matching;
-        _saveToDisk();
+        _scheduleSave();
         return matching;
       }
     }
@@ -161,8 +177,13 @@ class StorageService extends ChangeNotifier {
   }
   bool get isInitialized => _initialized;
 
-  Future<void> init({File? overrideFile}) async {
+  Future<void> init({File? overrideFile, Duration? debounceDuration}) async {
     if (_initialized) return;
+    if (debounceDuration != null) {
+      _debounceDuration = debounceDuration;
+    } else if (overrideFile != null) {
+      _debounceDuration = Duration.zero;
+    }
     if (overrideFile != null) {
       _storageFile = overrideFile;
     } else {
@@ -349,12 +370,60 @@ class StorageService extends ChangeNotifier {
     }
   }
 
+  Future<void> _scheduleSave({bool immediate = false}) {
+    if (immediate || _debounceDuration == Duration.zero) {
+      return flushPendingSave();
+    }
+
+    _saveTimer?.cancel();
+    final completer = _saveCompleter ??= Completer<void>();
+    _saveTimer = Timer(_debounceDuration, () async {
+      _saveTimer = null;
+      final currentCompleter = _saveCompleter;
+      _saveCompleter = null;
+      try {
+        await _saveToDisk();
+        if (currentCompleter != null && !currentCompleter.isCompleted) {
+          currentCompleter.complete();
+        }
+      } catch (e) {
+        if (currentCompleter != null && !currentCompleter.isCompleted) {
+          currentCompleter.completeError(e);
+        }
+      }
+    });
+    return completer.future;
+  }
+
+  Future<void> flushPendingSave() async {
+    _saveTimer?.cancel();
+    _saveTimer = null;
+    final currentCompleter = _saveCompleter;
+    _saveCompleter = null;
+    try {
+      await _saveToDisk();
+      if (currentCompleter != null && !currentCompleter.isCompleted) {
+        currentCompleter.complete();
+      }
+    } catch (e) {
+      if (currentCompleter != null && !currentCompleter.isCompleted) {
+        currentCompleter.completeError(e);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    flushPendingSave();
+    super.dispose();
+  }
+
   Future<void> setThemeKey(String key) async {
     if (_themeKey == key) return;
     _themeKey = key;
     _themeNotifier.value = key;
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave();
   }
 
   // --- Favorites ---
@@ -370,7 +439,7 @@ class StorageService extends ChangeNotifier {
       _favorites.insert(0, item);
     }
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave();
   }
 
   // --- History ---
@@ -381,13 +450,13 @@ class StorageService extends ChangeNotifier {
       _history.removeRange(100, _history.length);
     }
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave();
   }
 
   Future<void> clearHistory() async {
     _history.clear();
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave();
   }
 
   // --- Playlists ---
@@ -402,14 +471,14 @@ class StorageService extends ChangeNotifier {
     );
     _playlists.add(playlist);
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave();
     return playlist;
   }
 
   Future<void> deletePlaylist(String id) async {
     _playlists.removeWhere((p) => p.id == id);
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave();
   }
 
   Future<void> renamePlaylist(String id, String newTitle) async {
@@ -417,7 +486,7 @@ class StorageService extends ChangeNotifier {
     if (index >= 0) {
       _playlists[index].title = newTitle.trim();
       notifyListeners();
-      await _saveToDisk();
+      await _scheduleSave();
     }
   }
 
@@ -430,7 +499,7 @@ class StorageService extends ChangeNotifier {
       if (!_playlists[index].items.any((e) => e.id == item.id)) {
         _playlists[index].items.add(item);
         notifyListeners();
-        await _saveToDisk();
+        await _scheduleSave();
         return true;
       }
     }
@@ -445,7 +514,7 @@ class StorageService extends ChangeNotifier {
     if (index >= 0) {
       _playlists[index].items.removeWhere((e) => e.id == videoId);
       notifyListeners();
-      await _saveToDisk();
+      await _scheduleSave();
     }
   }
 
@@ -467,7 +536,7 @@ class StorageService extends ChangeNotifier {
         final item = items.removeAt(oldIndex);
         items.insert(newIndex, item);
         notifyListeners();
-        await _saveToDisk();
+        await _scheduleSave();
       }
     }
   }
@@ -487,7 +556,7 @@ class StorageService extends ChangeNotifier {
       }
       if (added > 0) {
         notifyListeners();
-        await _saveToDisk();
+        await _scheduleSave();
       }
       return added;
     }
@@ -511,13 +580,13 @@ class StorageService extends ChangeNotifier {
     _downloads.removeWhere((d) => d.item.id == download.item.id);
     _downloads.insert(0, download);
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave();
   }
 
   Future<void> removeDownload(String videoId) async {
     _downloads.removeWhere((d) => d.item.id == videoId);
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave();
   }
 
   Future<void> updatePlaybackPosition(String videoId, Duration position) async {
@@ -531,7 +600,7 @@ class StorageService extends ChangeNotifier {
           lastPlayedAt: DateTime.now(),
         );
         notifyListeners();
-        await _saveToDisk();
+        await _scheduleSave();
       }
     }
   }
@@ -544,7 +613,7 @@ class StorageService extends ChangeNotifier {
         lastPlayedAt: null,
       );
       notifyListeners();
-      await _saveToDisk();
+      await _scheduleSave();
     }
   }
 
@@ -558,39 +627,39 @@ class StorageService extends ChangeNotifier {
       _recentSearches.removeRange(20, _recentSearches.length);
     }
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave();
   }
 
   Future<void> removeRecentSearch(String query) async {
     _recentSearches.removeWhere((q) => q == query);
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave();
   }
 
   Future<void> clearRecentSearches() async {
     _recentSearches.clear();
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave();
   }
 
   // --- Settings ---
   Future<void> setAutoplay(bool enabled) async {
     _autoplay = enabled;
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave();
   }
 
   Future<void> setAudioQuality(String quality) async {
     _audioQuality = quality;
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave();
   }
 
   Future<void> setPlaybackSpeed(double speed) async {
     if (speed <= 0 || _playbackSpeed == speed) return;
     _playbackSpeed = speed;
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave();
   }
 
   Future<void> setTrackPdf(String trackId, String filePath, {String? title}) async {
@@ -651,14 +720,14 @@ class StorageService extends ChangeNotifier {
     }
 
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave();
   }
 
   Future<void> setPdfTitle(String filePath, String title) async {
     if (title.trim().isEmpty) return;
     _pdfTitles[filePath] = BookService.sanitizeBookTitle(title);
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave();
   }
 
   Future<void> purgePdf(String filePath) async {
@@ -667,7 +736,7 @@ class StorageService extends ChangeNotifier {
     _pdfPages.remove(filePath);
     _unmatchedTitleCache.clear();
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave(immediate: true);
   }
 
   Future<void> setTrackPdfPage(String trackId, int page, {String? pdfPath}) async {
@@ -676,7 +745,7 @@ class StorageService extends ChangeNotifier {
     if (path != null) {
       _pdfPages[path] = page;
     }
-    await _saveToDisk();
+    await _scheduleSave();
   }
 
   Future<void> removeTrackPdf(String trackId) async {
@@ -684,7 +753,7 @@ class StorageService extends ChangeNotifier {
     _trackPdfPages.remove(trackId);
     _detachedTracks.add(trackId);
     notifyListeners();
-    await _saveToDisk();
+    await _scheduleSave();
   }
 
   Future<void> clearAllData() async {
@@ -702,6 +771,6 @@ class StorageService extends ChangeNotifier {
     _themeNotifier.value = 'emerald';
     _playbackSpeed = 1.0;
     notifyListeners();
-    await _saveToDisk();
+    await flushPendingSave();
   }
 }

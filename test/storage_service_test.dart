@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -18,8 +19,11 @@ void main() {
   });
 
   tearDown(() async {
+    storage.dispose();
     if (await tempDir.exists()) {
-      await tempDir.delete(recursive: true);
+      try {
+        await tempDir.delete(recursive: true);
+      } catch (_) {}
     }
   });
 
@@ -147,5 +151,34 @@ void main() {
     expect(reloadedStorage.isFavorite(testItem.id), isTrue);
     expect(reloadedStorage.autoplay, isFalse);
     expect(reloadedStorage.audioQuality, 'saver');
+  });
+
+  test('debounces multiple rapid saves and flushes pending writes', () async {
+    final debouncedStorage = StorageService();
+    await debouncedStorage.init(
+      overrideFile: testFile,
+      debounceDuration: const Duration(milliseconds: 100),
+    );
+
+    // Perform multiple rapid writes without awaiting to test in-flight debouncing
+    unawaited(debouncedStorage.setAutoplay(false));
+    expect(debouncedStorage.hasPendingSave, isTrue);
+
+    // Rapid second write
+    unawaited(debouncedStorage.setAudioQuality('saver'));
+    expect(debouncedStorage.hasPendingSave, isTrue);
+
+    // Force flush
+    await debouncedStorage.flushPendingSave();
+    expect(debouncedStorage.hasPendingSave, isFalse);
+
+    // Verify persisted to disk
+    final reloadedStorage = StorageService();
+    await reloadedStorage.init(overrideFile: testFile);
+    expect(reloadedStorage.autoplay, isFalse);
+    expect(reloadedStorage.audioQuality, 'saver');
+
+    debouncedStorage.dispose();
+    reloadedStorage.dispose();
   });
 }
