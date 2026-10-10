@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio_background/just_audio_background.dart';
@@ -14,19 +16,20 @@ final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  try {
-    await JustAudioBackground.init(
+  final storageService = StorageService();
+
+  // Initialize background audio and storage in parallel before runApp
+  await Future.wait([
+    JustAudioBackground.init(
       androidNotificationChannelId: 'com.example.shuno.audio',
       androidNotificationChannelName: 'Shuno Audio Playback',
       androidNotificationOngoing: true,
-      androidNotificationIcon: 'mipmap/ic_launcher',
-    );
-  } catch (e) {
-    if (kDebugMode) debugPrint('JustAudioBackground init skipped or failed: $e');
-  }
-
-  final storageService = StorageService();
-  await storageService.init();
+      androidNotificationIcon: 'drawable/splash_icon',
+    ).catchError((e) {
+      if (kDebugMode) debugPrint('JustAudioBackground init skipped or failed: $e');
+    }),
+    storageService.init(),
+  ]);
 
   final youtubeService = YoutubeService();
   final playbackController = PlaybackController(
@@ -71,10 +74,10 @@ class ShunoApp extends StatelessWidget {
         );
     final download = downloadService ?? DownloadService(storageService: storage);
 
-    return ListenableBuilder(
-      listenable: storage,
-      builder: (context, _) {
-        final palette = AppPalette.fromId(storage.themeKey);
+    return ValueListenableBuilder<String>(
+      valueListenable: storage.themeNotifier,
+      builder: (context, themeKey, _) {
+        final palette = AppPalette.fromId(themeKey);
         return MaterialApp(
           scaffoldMessengerKey: rootScaffoldMessengerKey,
           title: 'Shuno',

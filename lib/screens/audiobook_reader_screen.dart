@@ -38,7 +38,7 @@ class AudiobookReaderScreen extends StatefulWidget {
 
 class _AudiobookReaderScreenState extends State<AudiobookReaderScreen> {
   late String _currentPdfPath = widget.pdfPath;
-  late int _currentPage = widget.storage.getTrackPdfPage(widget.item.id);
+  late int _currentPage = widget.storage.getTrackPdfPage(widget.item.id, pdfPath: widget.pdfPath);
   int _totalPages = 0;
   bool _isNightMode = true;
   bool _isReady = false;
@@ -93,7 +93,7 @@ class _AudiobookReaderScreenState extends State<AudiobookReaderScreen> {
     await _pdfViewController?.setPage(targetPage);
     if (mounted) {
       setState(() => _currentPage = targetPage);
-      widget.storage.setTrackPdfPage(widget.item.id, targetPage);
+      widget.storage.setTrackPdfPage(widget.item.id, targetPage, pdfPath: _currentPdfPath);
     }
   }
 
@@ -247,7 +247,7 @@ class _AudiobookReaderScreenState extends State<AudiobookReaderScreen> {
                         onPageChanged: (page, total) {
                           if (page != null && mounted) {
                             setState(() => _currentPage = page);
-                            widget.storage.setTrackPdfPage(widget.item.id, page);
+                            widget.storage.setTrackPdfPage(widget.item.id, page, pdfPath: _currentPdfPath);
                           }
                         },
                       ),

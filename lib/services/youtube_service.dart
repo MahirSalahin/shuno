@@ -41,35 +41,48 @@ class YoutubeService {
   }
 
   Future<Uri> resolveAudioUrl(String videoId, {bool highQuality = true}) async {
-    final youtube = YoutubeExplode();
+    final youtube = _yt;
+    StreamManifest manifest;
     try {
-      final manifest = await youtube.videos.streamsClient
+      // Query InnerTube API directly with mobile clients to avoid web watch page rate-limiting (429)
+      manifest = await youtube.videos.streamsClient
+          .getManifest(
+            videoId,
+            ytClients: [
+              YoutubeApiClient.androidSdkless,
+              YoutubeApiClient.ios,
+              YoutubeApiClient.androidMusic,
+            ],
+            requireWatchPage: false,
+          )
+          .timeout(const Duration(seconds: 25));
+    } catch (e) {
+      if (kDebugMode) debugPrint('InnerTube direct manifest fetch failed ($e), falling back...');
+      manifest = await youtube.videos.streamsClient
           .getManifest(videoId)
           .timeout(const Duration(seconds: 30));
-
-      // Prioritize Stream 18 (universal 360p MP4 with AAC stereo audio, ratebypass=yes, unthrottled)
-      final stream18 = manifest.muxed.where((s) => s.tag == 18).firstOrNull;
-      if (stream18 != null) {
-        return stream18.url;
-      }
-
-      if (manifest.audioOnly.isEmpty) {
-        if (manifest.muxed.isNotEmpty) {
-          return manifest.muxed.first.url;
-        }
-        throw StateError('This video has no playable audio stream.');
-      }
-      final mp4 = manifest.audioOnly.where(
-        (stream) => stream.container == StreamContainer.mp4,
-      );
-      final pool = mp4.isNotEmpty ? mp4 : manifest.audioOnly;
-      final stream = highQuality
-          ? pool.withHighestBitrate()
-          : (pool.length > 1 ? pool.elementAt(pool.length ~/ 2) : pool.first);
-      return stream.url;
-    } finally {
-      youtube.close();
     }
+
+    // Prioritize Stream 18 (universal 360p MP4 with AAC stereo audio, ratebypass=yes, unthrottled)
+    final stream18 = manifest.muxed.where((s) => s.tag == 18).firstOrNull;
+    if (stream18 != null) {
+      return stream18.url;
+    }
+
+    if (manifest.audioOnly.isEmpty) {
+      if (manifest.muxed.isNotEmpty) {
+        return manifest.muxed.first.url;
+      }
+      throw StateError('This video has no playable audio stream.');
+    }
+    final mp4 = manifest.audioOnly.where(
+      (stream) => stream.container == StreamContainer.mp4,
+    );
+    final pool = mp4.isNotEmpty ? mp4 : manifest.audioOnly;
+    final stream = highQuality
+        ? pool.withHighestBitrate()
+        : (pool.length > 1 ? pool.elementAt(pool.length ~/ 2) : pool.first);
+    return stream.url;
   }
 
   Future<List<YoutubeSearchItem>> search(String query) async {

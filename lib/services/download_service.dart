@@ -114,9 +114,24 @@ class DownloadService extends ChangeNotifier {
     File? targetFile;
 
     try {
-      final manifest = await yt.videos.streamsClient
-          .getManifest(item.id)
-          .timeout(const Duration(seconds: 30));
+      StreamManifest manifest;
+      try {
+        manifest = await yt.videos.streamsClient
+            .getManifest(
+              item.id,
+              ytClients: [
+                YoutubeApiClient.androidSdkless,
+                YoutubeApiClient.ios,
+                YoutubeApiClient.androidMusic,
+              ],
+              requireWatchPage: false,
+            )
+            .timeout(const Duration(seconds: 25));
+      } catch (_) {
+        manifest = await yt.videos.streamsClient
+            .getManifest(item.id)
+            .timeout(const Duration(seconds: 30));
+      }
 
       if (_cancelledIds.contains(item.id)) {
         throw _DownloadCancelledException();

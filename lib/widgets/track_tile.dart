@@ -48,6 +48,8 @@ class TrackTile extends StatelessWidget {
     final downloadItem = storage.getDownload(item.id);
     final isDownloading = downloadService?.isDownloading(item.id) ?? false;
     final duration = item.durationLabel;
+    final hasAttachedPdf =
+        BookService.isPdfFileValid(storage.getTrackPdfPath(item.id, title: item.title));
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2.5),
@@ -216,7 +218,7 @@ class TrackTile extends StatelessWidget {
                                   color: theme.colorScheme.outline,
                                 ),
                               ),
-                            if (BookService.isPdfFileValid(storage.getTrackPdfPath(item.id))) ...[
+                            if (hasAttachedPdf) ...[
                               const SizedBox(width: 4),
                               Icon(
                                 Icons.auto_stories,
@@ -379,7 +381,7 @@ class TrackTile extends StatelessWidget {
                             }
                             break;
                           case 'read_pdf':
-                            final existingPdf = storage.getTrackPdfPath(item.id);
+                            final existingPdf = storage.getTrackPdfPath(item.id, title: item.title);
                             if (existingPdf != null && BookService.isPdfFileValid(existingPdf)) {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
@@ -427,15 +429,15 @@ class TrackTile extends StatelessWidget {
                           value: 'read_pdf',
                           child: ListTile(
                             leading: Icon(
-                              BookService.isPdfFileValid(storage.getTrackPdfPath(item.id))
+                              hasAttachedPdf
                                   ? Icons.auto_stories
                                   : Icons.auto_stories_outlined,
-                              color: BookService.isPdfFileValid(storage.getTrackPdfPath(item.id))
+                              color: hasAttachedPdf
                                   ? theme.colorScheme.primary
                                   : null,
                             ),
                             title: Text(
-                              BookService.isPdfFileValid(storage.getTrackPdfPath(item.id))
+                              hasAttachedPdf
                                   ? 'Read along (Book attached)'
                                   : 'Read along (PDF)',
                             ),

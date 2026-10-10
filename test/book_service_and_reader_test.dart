@@ -188,6 +188,70 @@ void main() {
       await validFile.writeAsBytes(List.filled(100 * 1024, 0));
       expect(BookService.isPdfFileValid(validFile.path), isTrue);
     });
+
+    test('isPdfFileValid accepts genuine small PDFs starting with %PDF', () async {
+      final smallPdf = File('${tempDir.path}/small.pdf');
+      // 5 KB file with %PDF magic bytes
+      final bytes = <int>[0x25, 0x50, 0x44, 0x46, ...List.filled(5000, 0x20)];
+      await smallPdf.writeAsBytes(bytes);
+      expect(BookService.isPdfFileValid(smallPdf.path), isTrue);
+
+      final nonPdf = File('${tempDir.path}/non_pdf.pdf');
+      // 5 KB file with HTML or non-PDF bytes
+      final nonPdfBytes = <int>[0x3C, 0x21, 0x44, 0x4F, ...List.filled(5000, 0x20)];
+      await nonPdf.writeAsBytes(nonPdfBytes);
+      expect(BookService.isPdfFileValid(nonPdf.path), isFalse);
+    });
+
+    test('getTrackPdfPath auto-resolves sibling tracks and shares reading page', () async {
+      final bookPdf = '${tempDir.path}/gabhi_bittanto.pdf';
+      await File(bookPdf).writeAsString('dummy pdf data');
+
+      const part1 = YoutubeSearchItem(
+        id: 'track_gabhi_1',
+        title: 'গাভী বিত্তান্ত 1/6 | আহমদ ছফা',
+        channelName: 'Audiobooks',
+        thumbnailUrl: '',
+      );
+      const part2 = YoutubeSearchItem(
+        id: 'track_gabhi_2',
+        title: 'গাভী বিত্তান্ত 2/6 | আহমদ ছফা',
+        channelName: 'Audiobooks',
+        thumbnailUrl: '',
+      );
+
+      // Sibling in playlist
+      await storage.createPlaylist('Gabhi');
+      final plId = storage.playlists.first.id;
+      await storage.addTrackToPlaylist(plId, part1);
+      await storage.addTrackToPlaylist(plId, part2);
+
+      // Attach PDF to part 1
+      await storage.setTrackPdf(part1.id, bookPdf, title: 'গাভী বিত্তান্ত');
+
+      // Part 1 has it directly
+      expect(storage.getTrackPdfPath(part1.id), bookPdf);
+
+      // Part 2 is automatically linked because it's a sibling in the playlist!
+      expect(storage.getTrackPdfPath(part2.id), bookPdf);
+
+      // If a part 3 is not in the playlist yet, getTrackPdfPath resolves by title
+      expect(
+        storage.getTrackPdfPath('track_gabhi_3', title: 'গাভী বিত্তান্ত 3/6 | আহমদ ছফা'),
+        bookPdf,
+      );
+
+      // Reading progress on part 1 is shared with other parts of that PDF
+      await storage.setTrackPdfPage(part1.id, 55, pdfPath: bookPdf);
+      expect(storage.getTrackPdfPage('track_gabhi_3', pdfPath: bookPdf), 55);
+
+      // Explicit detachment of a track prevents auto-linking
+      await storage.removeTrackPdf('track_gabhi_3');
+      expect(
+        storage.getTrackPdfPath('track_gabhi_3', title: 'গাভী বিত্তান্ত 3/6 | আহমদ ছফা'),
+        isNull,
+      );
+    });
   });
 
   group('BookService Internet Archive API Mocking & Multi-Search', () {

@@ -194,7 +194,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
     final item = widget.playback.selected;
     if (item == null) return;
 
-    final existingPdf = widget.storage.getTrackPdfPath(item.id);
+    final existingPdf = widget.storage.getTrackPdfPath(item.id, title: item.title);
     if (existingPdf != null && BookService.isPdfFileValid(existingPdf)) {
       Navigator.of(context).pop();
       Navigator.of(context).push(
@@ -267,7 +267,8 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
     final isFav = storage.isFavorite(item.id);
     final isDownloaded = storage.isDownloaded(item.id);
     final isDownloading = downloadService?.isDownloading(item.id) ?? false;
-    final hasAttachedPdf = BookService.isPdfFileValid(storage.getTrackPdfPath(item.id));
+    final attachedPdfPath = storage.getTrackPdfPath(item.id, title: item.title);
+    final hasAttachedPdf = BookService.isPdfFileValid(attachedPdfPath);
     final duration = playback.duration > Duration.zero
         ? playback.duration
         : (item.duration ?? Duration.zero);
@@ -750,7 +751,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                           color: theme.colorScheme.primary,
                         ),
                         label: Text(
-                          'Book (p. ${storage.getTrackPdfPage(item.id) + 1})',
+                          'Book (p. ${storage.getTrackPdfPage(item.id, pdfPath: attachedPdfPath) + 1})',
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: theme.colorScheme.primary,
                             fontWeight: FontWeight.w600,

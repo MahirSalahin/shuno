@@ -405,12 +405,14 @@ class PlaybackController extends ChangeNotifier {
       if ((_foreground || !_pauseOnBackground) && _error == null) {
         unawaited(_play(request));
       }
-    } catch (error) {
+    } catch (error, stack) {
       if (_disposed || request != _request) return;
-      if (kDebugMode) debugPrint('Audio load failed: $error');
+      debugPrint('Audio load failed: $error\n$stack');
       final errStr = error.toString();
       _error = errStr.contains('403')
           ? 'YouTube restricted playback for this video (403). Try another video.'
+          : (errStr.contains('429') || errStr.contains('RequestLimitExceededException'))
+          ? 'YouTube is temporarily rate-limiting requests. Please wait a moment.'
           : error is TimeoutException
           ? 'Audio loading timed out. Check your connection and retry.'
           : 'Could not play this video. Check your connection or try another video.';

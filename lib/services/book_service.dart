@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -82,15 +83,50 @@ class BookService extends ChangeNotifier {
   double getDownloadProgress(String bookId) =>
       _activeDownloads[bookId]?.progress ?? 0.0;
 
-  /// Checks if a file path points to an existing, valid non-empty PDF (> 50 KB).
+  static final Set<String> _validPdfPathCache = {};
+
+  /// Checks if a file path points to an existing, valid non-empty PDF.
+  /// Validates size and magic %PDF bytes for smaller documents to ensure
+  /// genuine PDFs picked from device storage are preserved.
+  /// Uses an in-memory cache to eliminate repetitive synchronous disk reads during scrolling.
   static bool isPdfFileValid(String? path) {
     if (path == null || path.trim().isEmpty) return false;
+    if (_validPdfPathCache.contains(path)) return true;
     try {
       final file = File(path);
-      return file.existsSync() && file.lengthSync() > 50 * 1024;
+      if (!file.existsSync()) {
+        _validPdfPathCache.remove(path);
+        return false;
+      }
+      final len = file.lengthSync();
+      if (len <= 1024) return false;
+      if (len > 50 * 1024) {
+        _validPdfPathCache.add(path);
+        return true;
+      }
+
+      final raf = file.openSync(mode: FileMode.read);
+      try {
+        final header = raf.readSync(4);
+        if (header.length >= 4 &&
+            header[0] == 0x25 && // '%'
+            header[1] == 0x50 && // 'P'
+            header[2] == 0x44 && // 'D'
+            header[3] == 0x46) { // 'F'
+          _validPdfPathCache.add(path);
+          return true;
+        }
+      } finally {
+        raf.closeSync();
+      }
+      return false;
     } catch (_) {
       return false;
     }
+  }
+
+  static void invalidatePdfCache(String path) {
+    _validPdfPathCache.remove(path);
   }
 
   /// Checks whether [text] contains any Bengali script characters.
@@ -705,6 +741,8 @@ class BookService extends ChangeNotifier {
   }
 
   /// Allows picking a local PDF file from the user's phone storage.
+  /// Automatically copies the picked file into the app's persistent documents directory
+  /// (`/books/`) so Android OS cache evictions do not clear it.
   Future<String?> pickLocalPdf() async {
     try {
       final files = await FilePicker.pickFiles(
@@ -712,9 +750,41 @@ class BookService extends ChangeNotifier {
         allowedExtensions: ['pdf'],
       );
       if (files.isNotEmpty) {
-        return files.first.path;
+        final picked = files.first;
+        final pickedPath = picked.path;
+
+        final baseDir = await getApplicationDocumentsDirectory();
+        final booksDir = Directory('${baseDir.path}/books');
+        if (!await booksDir.exists()) {
+          await booksDir.create(recursive: true);
+        }
+
+        var rawName = picked.name.replaceAll(RegExp(r'[^\w\.\-]'), '_');
+        if (!rawName.toLowerCase().endsWith('.pdf')) {
+          rawName = '$rawName.pdf';
+        }
+        final destPath =
+            '${booksDir.path}/local_${DateTime.now().millisecondsSinceEpoch}_$rawName';
+        final destFile = File(destPath);
+
+        if (pickedPath != null && pickedPath.isNotEmpty) {
+          final source = File(pickedPath);
+          if (await source.exists()) {
+            await source.copy(destFile.path);
+            if (await destFile.exists() && await destFile.length() > 0) {
+              return destFile.path;
+            }
+          }
+        }
+
+        // Fallback: If copy failed, return pickedPath if it exists
+        if (pickedPath != null && await File(pickedPath).exists()) {
+          return pickedPath;
+        }
       }
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error in pickLocalPdf: $e');
+    }
     return null;
   }
 
@@ -768,6 +838,7 @@ class BookService extends ChangeNotifier {
   /// Deletes a downloaded PDF file from device storage, returning true if deleted.
   Future<bool> deleteDownloadedPdf(String filePath) async {
     try {
+      invalidatePdfCache(filePath);
       final file = File(filePath);
       if (await file.exists()) {
         await file.delete();

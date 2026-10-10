@@ -21,11 +21,16 @@ class StorageService extends ChangeNotifier {
   final Map<String, String> _trackPdfs = {};
   final Map<String, int> _trackPdfPages = {};
   final Map<String, String> _pdfTitles = {};
+  final Map<String, int> _pdfPages = {};
+  final Set<String> _detachedTracks = {};
+  final Set<String> _unmatchedTitleCache = {};
   bool _autoplay = true;
   String _audioQuality = 'high'; // 'high' or 'saver'
   String _themeKey = 'emerald'; // 'emerald', 'cyan', 'amethyst', 'amber'
+  late final ValueNotifier<String> _themeNotifier = ValueNotifier<String>(_themeKey);
   double _playbackSpeed = 1.0;
 
+  ValueListenable<String> get themeNotifier => _themeNotifier;
   List<YoutubeSearchItem> get favorites => List.unmodifiable(_favorites);
   List<YoutubeSearchItem> get history => List.unmodifiable(_history);
   List<Playlist> get playlists => List.unmodifiable(_playlists);
@@ -35,8 +40,41 @@ class StorageService extends ChangeNotifier {
   String get audioQuality => _audioQuality;
   String get themeKey => _themeKey;
   double get playbackSpeed => _playbackSpeed;
-  String? getTrackPdfPath(String trackId) => _trackPdfs[trackId];
-  int getTrackPdfPage(String trackId) => _trackPdfPages[trackId] ?? 0;
+
+  String? getTrackPdfPath(String trackId, {String? title}) {
+    final direct = _trackPdfs[trackId];
+    if (direct != null) {
+      return direct;
+    }
+
+    if (_detachedTracks.contains(trackId)) {
+      return null;
+    }
+
+    if (title != null && title.trim().isNotEmpty) {
+      final cleanQuery = BookService.cleanAudiobookQuery(title);
+      final matching = findMatchingPdfPath(cleanQuery);
+      if (matching != null) {
+        _trackPdfs[trackId] = matching;
+        _saveToDisk();
+        return matching;
+      }
+    }
+
+    return null;
+  }
+
+  int getTrackPdfPage(String trackId, {String? pdfPath}) {
+    if (_trackPdfPages.containsKey(trackId)) {
+      return _trackPdfPages[trackId]!;
+    }
+    final path = pdfPath ?? _trackPdfs[trackId];
+    if (path != null && _pdfPages.containsKey(path)) {
+      return _pdfPages[path]!;
+    }
+    return 0;
+  }
+
   Map<String, String> get trackPdfs => Map.unmodifiable(_trackPdfs);
   String? getPdfTitle(String filePath) => _pdfTitles[filePath];
 
@@ -44,8 +82,36 @@ class StorageService extends ChangeNotifier {
   String? findMatchingPdfPath(String cleanTitleQuery) {
     if (cleanTitleQuery.trim().isEmpty) return null;
     final target = cleanTitleQuery.toLowerCase();
+    if (_unmatchedTitleCache.contains(target)) return null;
 
-    // Check all tracks in favorites, history, playlists
+    final targetTranslit = BookService.containsBengali(target)
+        ? BookService.transliterateBengali(target).toLowerCase()
+        : null;
+
+    // 1. Check known PDF titles from _pdfTitles (string matching first, then disk check)
+    for (final entry in _pdfTitles.entries) {
+      final path = entry.key;
+      final rawTitle = entry.value;
+      final cleanTitle = BookService.cleanAudiobookQuery(rawTitle).toLowerCase();
+      var matches = cleanTitle.isNotEmpty &&
+          (cleanTitle == target ||
+              cleanTitle.contains(target) ||
+              target.contains(cleanTitle));
+
+      if (!matches && (targetTranslit != null || BookService.containsBengali(cleanTitle))) {
+        final t1 = targetTranslit ?? BookService.transliterateBengali(target).toLowerCase();
+        final t2 = BookService.transliterateBengali(cleanTitle).toLowerCase();
+        if (t1.isNotEmpty && (t1 == t2 || t1.contains(t2) || t2.contains(t1))) {
+          matches = true;
+        }
+      }
+
+      if (matches && File(path).existsSync()) {
+        return path;
+      }
+    }
+
+    // 2. Check all tracks in favorites, history, playlists
     final allItems = <YoutubeSearchItem>[
       ..._history,
       ..._favorites,
@@ -54,32 +120,43 @@ class StorageService extends ChangeNotifier {
 
     for (final item in allItems) {
       final path = _trackPdfs[item.id];
-      if (path != null && File(path).existsSync()) {
-        final otherClean = BookService.cleanAudiobookQuery(item.title).toLowerCase();
-        if (otherClean.isNotEmpty &&
-            (otherClean == target ||
-                otherClean.contains(target) ||
-                target.contains(otherClean))) {
-          final displayTitle = BookService.cleanAudiobookTitle(item.title);
-          _pdfTitles[path] = BookService.sanitizeBookTitle(
-            _pdfTitles[path],
-            fallbackTitle: displayTitle,
-          );
-          return path;
+      if (path == null) continue;
+
+      final otherClean = BookService.cleanAudiobookQuery(item.title).toLowerCase();
+      var matches = otherClean.isNotEmpty &&
+          (otherClean == target ||
+              otherClean.contains(target) ||
+              target.contains(otherClean));
+
+      if (!matches && (targetTranslit != null || BookService.containsBengali(otherClean))) {
+        final t1 = targetTranslit ?? BookService.transliterateBengali(target).toLowerCase();
+        final t2 = BookService.transliterateBengali(otherClean).toLowerCase();
+        if (t1.isNotEmpty && (t1 == t2 || t1.contains(t2) || t2.contains(t1))) {
+          matches = true;
         }
+      }
+
+      if (matches && File(path).existsSync()) {
+        final displayTitle = BookService.cleanAudiobookTitle(item.title);
+        _pdfTitles[path] = BookService.sanitizeBookTitle(
+          _pdfTitles[path],
+          fallbackTitle: displayTitle,
+        );
+        return path;
       }
     }
 
-    // Check by file names
+    // 3. Check by file names
     for (final path in _trackPdfs.values) {
-      if (File(path).existsSync()) {
-        final name = path.split(Platform.pathSeparator).last.replaceAll('.pdf', '').toLowerCase();
-        if (name.contains(target) || target.contains(name)) {
+      final name = path.split(Platform.pathSeparator).last.replaceAll('.pdf', '').toLowerCase();
+      if (name.contains(target) || target.contains(name)) {
+        if (File(path).existsSync()) {
           return path;
         }
       }
     }
 
+    _unmatchedTitleCache.add(target);
     return null;
   }
   bool get isInitialized => _initialized;
@@ -160,6 +237,7 @@ class StorageService extends ChangeNotifier {
       }
       if (data['themeKey'] is String) {
         _themeKey = data['themeKey'] as String;
+        _themeNotifier.value = _themeKey;
       }
       if (data['playbackSpeed'] is num) {
         _playbackSpeed = (data['playbackSpeed'] as num).toDouble();
@@ -191,6 +269,54 @@ class StorageService extends ChangeNotifier {
           }
         });
       }
+
+      _pdfPages.clear();
+      if (data['pdfPages'] is Map) {
+        (data['pdfPages'] as Map).forEach((k, v) {
+          if (k is String && v is int) {
+            _pdfPages[k] = v;
+          }
+        });
+      }
+
+      _detachedTracks.clear();
+      if (data['detachedTracks'] is List) {
+        for (final item in data['detachedTracks'] as List) {
+          if (item is String) {
+            _detachedTracks.add(item);
+          }
+        }
+      }
+
+      // Migrate any existing PDFs residing in temporary cache directories to persistent books directory
+      if (_trackPdfs.isNotEmpty) {
+        try {
+          final baseDir = await getApplicationDocumentsDirectory();
+          final booksDir = Directory('${baseDir.path}/books');
+          for (final entry in _trackPdfs.entries.toList()) {
+            final oldPath = entry.value;
+            if (oldPath.contains('/cache/') ||
+                oldPath.contains('${Platform.pathSeparator}cache${Platform.pathSeparator}')) {
+              final oldFile = File(oldPath);
+              if (oldFile.existsSync()) {
+                if (!booksDir.existsSync()) {
+                  booksDir.createSync(recursive: true);
+                }
+                final fileName = oldPath.split(Platform.pathSeparator).last;
+                final safeName = fileName.replaceAll(RegExp(r'[^\w\.\-]'), '_');
+                final newPath =
+                    '${booksDir.path}/local_${DateTime.now().millisecondsSinceEpoch}_$safeName';
+                oldFile.copySync(newPath);
+                _trackPdfs[entry.key] = newPath;
+                if (_pdfTitles.containsKey(oldPath)) {
+                  _pdfTitles[newPath] = _pdfTitles[oldPath]!;
+                  _pdfTitles.remove(oldPath);
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
     } catch (e) {
       if (kDebugMode) debugPrint('Error loading storage: $e');
     }
@@ -214,6 +340,8 @@ class StorageService extends ChangeNotifier {
         'trackPdfs': _trackPdfs,
         'trackPdfPages': _trackPdfPages,
         'pdfTitles': _pdfTitles,
+        'pdfPages': _pdfPages,
+        'detachedTracks': _detachedTracks.toList(),
       };
       await file.writeAsString(jsonEncode(data), flush: true);
     } catch (e) {
@@ -224,6 +352,7 @@ class StorageService extends ChangeNotifier {
   Future<void> setThemeKey(String key) async {
     if (_themeKey == key) return;
     _themeKey = key;
+    _themeNotifier.value = key;
     notifyListeners();
     await _saveToDisk();
   }
@@ -465,10 +594,62 @@ class StorageService extends ChangeNotifier {
   }
 
   Future<void> setTrackPdf(String trackId, String filePath, {String? title}) async {
-    _trackPdfs[trackId] = filePath;
+    var resolvedPath = filePath;
+
+    // Safety: If filePath points to a temporary cache location, make a permanent copy
+    try {
+      if (resolvedPath.contains('${Platform.pathSeparator}cache${Platform.pathSeparator}') ||
+          resolvedPath.contains('/cache/')) {
+        final file = File(resolvedPath);
+        if (file.existsSync()) {
+          final baseDir = await getApplicationDocumentsDirectory();
+          final booksDir = Directory('${baseDir.path}/books');
+          if (!await booksDir.exists()) {
+            await booksDir.create(recursive: true);
+          }
+          final fileName = resolvedPath.split(Platform.pathSeparator).last;
+          final safeName = fileName.replaceAll(RegExp(r'[^\w\.\-]'), '_');
+          final permPath =
+              '${booksDir.path}/local_${DateTime.now().millisecondsSinceEpoch}_$safeName';
+          await file.copy(permPath);
+          if (await File(permPath).exists()) {
+            resolvedPath = permPath;
+          }
+        }
+      }
+    } catch (_) {}
+
+    _trackPdfs[trackId] = resolvedPath;
+    _detachedTracks.remove(trackId);
+    _unmatchedTitleCache.clear();
+
     if (title != null && title.trim().isNotEmpty) {
-      _pdfTitles[filePath] = BookService.sanitizeBookTitle(title);
+      final cleanTitle = BookService.sanitizeBookTitle(title);
+      _pdfTitles[resolvedPath] = cleanTitle;
+
+      // Auto-associate with matching sibling parts in history, favorites, playlists
+      final query = BookService.cleanAudiobookQuery(cleanTitle).toLowerCase();
+      if (query.isNotEmpty) {
+        final allItems = <YoutubeSearchItem>[
+          ..._history,
+          ..._favorites,
+          for (final p in _playlists) ...p.items,
+        ];
+        for (final item in allItems) {
+          if (item.id != trackId && !_detachedTracks.contains(item.id)) {
+            final otherQuery =
+                BookService.cleanAudiobookQuery(item.title).toLowerCase();
+            if (otherQuery.isNotEmpty &&
+                (otherQuery == query ||
+                    otherQuery.contains(query) ||
+                    query.contains(otherQuery))) {
+              _trackPdfs[item.id] = resolvedPath;
+            }
+          }
+        }
+      }
     }
+
     notifyListeners();
     await _saveToDisk();
   }
@@ -483,19 +664,25 @@ class StorageService extends ChangeNotifier {
   Future<void> purgePdf(String filePath) async {
     _trackPdfs.removeWhere((_, path) => path == filePath);
     _pdfTitles.remove(filePath);
+    _pdfPages.remove(filePath);
+    _unmatchedTitleCache.clear();
     notifyListeners();
     await _saveToDisk();
   }
 
-  Future<void> setTrackPdfPage(String trackId, int page) async {
-    if (_trackPdfPages[trackId] == page) return;
+  Future<void> setTrackPdfPage(String trackId, int page, {String? pdfPath}) async {
     _trackPdfPages[trackId] = page;
+    final path = pdfPath ?? _trackPdfs[trackId];
+    if (path != null) {
+      _pdfPages[path] = page;
+    }
     await _saveToDisk();
   }
 
   Future<void> removeTrackPdf(String trackId) async {
     _trackPdfs.remove(trackId);
     _trackPdfPages.remove(trackId);
+    _detachedTracks.add(trackId);
     notifyListeners();
     await _saveToDisk();
   }
@@ -509,6 +696,10 @@ class StorageService extends ChangeNotifier {
     _trackPdfs.clear();
     _trackPdfPages.clear();
     _pdfTitles.clear();
+    _pdfPages.clear();
+    _detachedTracks.clear();
+    _unmatchedTitleCache.clear();
+    _themeNotifier.value = 'emerald';
     _playbackSpeed = 1.0;
     notifyListeners();
     await _saveToDisk();

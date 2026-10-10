@@ -39,8 +39,6 @@ class _HomeNavigationScreenState extends State<HomeNavigationScreen> {
     _lastTrackId = widget.playbackController.selected?.id;
     _lastUpcomingCount = widget.playbackController.upNext.length;
     widget.playbackController.addListener(_onPlaybackUpdate);
-    widget.storageService.addListener(_onServiceUpdate);
-    widget.downloadService.addListener(_onServiceUpdate);
   }
 
   void _onPlaybackUpdate() {
@@ -53,15 +51,9 @@ class _HomeNavigationScreenState extends State<HomeNavigationScreen> {
     }
   }
 
-  void _onServiceUpdate() {
-    if (mounted) setState(() {});
-  }
-
   @override
   void dispose() {
     widget.playbackController.removeListener(_onPlaybackUpdate);
-    widget.storageService.removeListener(_onServiceUpdate);
-    widget.downloadService.removeListener(_onServiceUpdate);
     super.dispose();
   }
 
