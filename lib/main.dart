@@ -1,10 +1,11 @@
 import 'dart:async';
 
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:just_audio_background/just_audio_background.dart';
 
 import 'screens/home_navigation_screen.dart';
+import 'services/audio_handler.dart';
 import 'services/download_service.dart';
 import 'services/playback_controller.dart';
 import 'services/storage_service.dart';
@@ -17,16 +18,24 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final storageService = StorageService();
+  ShunoAudioHandler? audioHandler;
 
-  // Initialize background audio and storage in parallel before runApp
+  // Initialize background audio handler and storage in parallel before runApp
   await Future.wait([
-    JustAudioBackground.init(
-      androidNotificationChannelId: 'com.example.shuno.audio',
-      androidNotificationChannelName: 'Shuno Audio Playback',
-      androidNotificationOngoing: true,
-      androidNotificationIcon: 'drawable/splash_icon',
-    ).catchError((e) {
-      if (kDebugMode) debugPrint('JustAudioBackground init skipped or failed: $e');
+    AudioService.init(
+      builder: () => ShunoAudioHandler(),
+      config: const AudioServiceConfig(
+        androidNotificationChannelId: 'com.example.shuno.audio',
+        androidNotificationChannelName: 'Shuno Audio Playback',
+        androidNotificationOngoing: true,
+        androidNotificationIcon: 'drawable/splash_icon',
+        androidStopForegroundOnPause: true,
+      ),
+    ).then((handler) {
+      audioHandler = handler;
+    }).catchError((e) {
+      if (kDebugMode) debugPrint('AudioService init skipped or failed: $e');
+      return null;
     }),
     storageService.init(),
   ]);
@@ -35,7 +44,9 @@ Future<void> main() async {
   final playbackController = PlaybackController(
     youtubeService: youtubeService,
     storageService: storageService,
+    audioHandler: audioHandler,
   );
+  audioHandler?.attachController(playbackController);
   final downloadService = DownloadService(storageService: storageService);
 
   runApp(

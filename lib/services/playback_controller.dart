@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:just_audio_background/just_audio_background.dart';
 
 import '../models/youtube_search_item.dart';
+import 'audio_handler.dart';
 import 'storage_service.dart';
 import 'youtube_service.dart';
 
@@ -16,15 +17,18 @@ class PlaybackController extends ChangeNotifier {
     required YoutubeService youtubeService,
     StorageService? storageService,
     AudioPlayer? player,
+    ShunoAudioHandler? audioHandler,
     bool pauseOnBackground = false,
   }) : _youtubeService = youtubeService,
        _storageService = storageService,
        _player = player,
+       _audioHandler = audioHandler,
        _pauseOnBackground = pauseOnBackground,
        _playbackSpeed = storageService?.playbackSpeed ?? 1.0;
 
   final YoutubeService _youtubeService;
   final StorageService? _storageService;
+  final ShunoAudioHandler? _audioHandler;
   final bool _pauseOnBackground;
   AudioPlayer? _player;
   double _playbackSpeed;
@@ -86,11 +90,37 @@ class PlaybackController extends ChangeNotifier {
   ValueListenable<Duration> get durationNotifier => _durationNotifier;
   ValueListenable<Duration> get bufferedPositionNotifier =>
       _bufferedPositionNotifier;
+  ShunoAudioHandler? get audioHandler => _audioHandler;
+
   bool get hasNext =>
       _loopMode == PlaybackLoopMode.all ||
       _currentIndex + 1 < _queue.length ||
       (_storageService != null && _storageService.autoplay);
   bool get hasPrevious => _currentIndex > 0 || _position.inSeconds > 3;
+
+  @override
+  void notifyListeners() {
+    _syncAudioHandler();
+    super.notifyListeners();
+  }
+
+  void _syncAudioHandler() {
+    final handler = _audioHandler;
+    if (handler == null || _disposed) return;
+    handler.syncPlaybackState(
+      isPlaying: isPlaying,
+      isLoading: _loading,
+      isBuffering: isBuffering,
+      isCompleted: isCompleted,
+      position: _position,
+      bufferedPosition: _bufferedPosition,
+      speed: _playbackSpeed,
+      error: _error,
+      currentIndex: _currentIndex >= 0 ? _currentIndex : null,
+      hasPrevious: hasPrevious,
+      hasNext: hasNext,
+    );
+  }
 
   bool get hasSleepTimer => _sleepTimer != null || _sleepAtEndOfTrack;
   bool get isSleepAtEndOfTrack => _sleepAtEndOfTrack;
@@ -201,6 +231,11 @@ class PlaybackController extends ChangeNotifier {
       if (!_disposed && dur != null) {
         _duration = dur;
         _durationNotifier.value = dur;
+        if (_selected != null) {
+          _audioHandler?.updateMediaItemFromSearchItem(
+            _selected!.copyWith(duration: dur),
+          );
+        }
         notifyListeners();
       }
     });
@@ -209,6 +244,7 @@ class PlaybackController extends ChangeNotifier {
       if (!_disposed) {
         _bufferedPosition = buf;
         _bufferedPositionNotifier.value = buf;
+        _syncAudioHandler();
       }
     });
 
@@ -277,6 +313,7 @@ class PlaybackController extends ChangeNotifier {
   void addToQueue(YoutubeSearchItem item) {
     if (!_queue.any((e) => e.id == item.id)) {
       _queue.add(item);
+      _audioHandler?.updateQueueFromSearchItems(_queue);
       notifyListeners();
       if (_selected == null && !_loading) {
         playItem(item);
@@ -292,6 +329,7 @@ class PlaybackController extends ChangeNotifier {
     _queue.removeWhere((e) => e.id == item.id);
     final insertIndex = (_currentIndex + 1).clamp(0, _queue.length);
     _queue.insert(insertIndex, item);
+    _audioHandler?.updateQueueFromSearchItems(_queue);
     notifyListeners();
   }
 
@@ -299,6 +337,7 @@ class PlaybackController extends ChangeNotifier {
     if (index < 0 || index >= _queue.length) return;
     final isCurrent = index == _currentIndex;
     _queue.removeAt(index);
+    _audioHandler?.updateQueueFromSearchItems(_queue);
     if (_currentIndex > index) {
       _currentIndex--;
     } else if (isCurrent) {
@@ -323,6 +362,7 @@ class PlaybackController extends ChangeNotifier {
     if (_selected != null) {
       _currentIndex = _queue.indexOf(_selected!);
     }
+    _audioHandler?.updateQueueFromSearchItems(_queue);
     notifyListeners();
   }
 
@@ -330,6 +370,8 @@ class PlaybackController extends ChangeNotifier {
     _queue.clear();
     _currentIndex = -1;
     _selected = null;
+    _audioHandler?.updateMediaItemFromSearchItem(null);
+    _audioHandler?.updateQueueFromSearchItems(const []);
     _player?.stop();
     notifyListeners();
   }
@@ -353,6 +395,8 @@ class PlaybackController extends ChangeNotifier {
     _positionNotifier.value = _position;
     _duration = item.duration ?? Duration.zero;
     _durationNotifier.value = _duration;
+    _audioHandler?.updateMediaItemFromSearchItem(item);
+    _audioHandler?.updateQueueFromSearchItems(_queue);
     notifyListeners();
 
     try {
@@ -557,6 +601,7 @@ class PlaybackController extends ChangeNotifier {
       if (unplayed.isNotEmpty) {
         final nextItem = unplayed.first;
         _queue.add(nextItem);
+        _audioHandler?.updateQueueFromSearchItems(_queue);
         notifyListeners();
 
         // Pre-warm audio stream resolution while network and wake-lock are active
@@ -701,6 +746,7 @@ class PlaybackController extends ChangeNotifier {
       _saveOfflinePositionIfNeeded(_position, force: true);
     }
     cancelSleepTimer();
+    _audioHandler?.detachController();
     unawaited(_stateSubscription?.cancel());
     unawaited(_errorSubscription?.cancel());
     unawaited(_positionSubscription?.cancel());

@@ -44,6 +44,22 @@ class YoutubeSearchItem {
     );
   }
 
+  YoutubeSearchItem copyWith({
+    String? id,
+    String? title,
+    String? channelName,
+    String? thumbnailUrl,
+    Duration? duration,
+  }) {
+    return YoutubeSearchItem(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      channelName: channelName ?? this.channelName,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
+      duration: duration ?? this.duration,
+    );
+  }
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
