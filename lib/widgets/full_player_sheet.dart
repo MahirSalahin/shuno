@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
@@ -36,9 +37,9 @@ class FullPlayerSheet extends StatefulWidget {
     BookService? bookService,
     VoidCallback? onOpenQueue,
   }) {
-    Navigator.of(context).push(
+    Navigator.of(context, rootNavigator: true).push(
       PageRouteBuilder(
-        opaque: false,
+        opaque: true,
         barrierDismissible: false,
         pageBuilder: (context, animation, secondaryAnimation) => AnimatedBuilder(
           animation: Listenable.merge([
@@ -270,6 +271,8 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
     }
 
     final theme = Theme.of(context);
+    final surfaceColor = theme.colorScheme.surface;
+    final hasThumbnail = item.thumbnailUrl.isNotEmpty;
     final isFav = storage.isFavorite(item.id);
     final isDownloaded = storage.isDownloaded(item.id);
     final isDownloading = downloadService?.isDownloading(item.id) ?? false;
@@ -277,115 +280,146 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
     final hasAttachedPdf = BookService.isPdfFileValid(attachedPdfPath);
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              theme.colorScheme.primary.withAlpha(90),
-              theme.colorScheme.primary.withAlpha(35),
-              theme.colorScheme.surface.withAlpha(245),
-              theme.colorScheme.surface,
-            ],
-            stops: const [0.0, 0.32, 0.65, 1.0],
-          ),
-        ),
-        child: SafeArea(
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onVerticalDragEnd: (details) {
-              if ((details.primaryVelocity ?? 0.0) > 280) {
-                Navigator.of(context).pop();
-              }
-            },
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Top Bar: Minimize arrow, Center "NOW PLAYING" & channel name, Right Playlist Add
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                        iconSize: 28,
-                        visualDensity: VisualDensity.compact,
-                        icon: const Icon(Icons.keyboard_arrow_down),
-                        tooltip: 'Minimize',
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                      Expanded(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'NOW PLAYING',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                letterSpacing: 1.5,
-                                fontWeight: FontWeight.w700,
-                                color: theme.colorScheme.onSurfaceVariant.withAlpha(210),
-                                fontSize: 10.5,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              item.channelName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: theme.colorScheme.onSurface,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        iconSize: 24,
-                        visualDensity: VisualDensity.compact,
-                        icon: const Icon(Icons.playlist_add),
-                        tooltip: 'Add to playlist',
-                        onPressed: () => AddToPlaylistDialog.show(
-                          context,
-                          item: item,
-                          storageService: storage,
-                        ),
-                      ),
+      backgroundColor: surfaceColor,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 1. Fully Opaque Solid Base Color
+          ColoredBox(color: surfaceColor),
+
+          // 2. Diffused Ambient Artwork Backdrop (Spotify-style)
+          if (hasThumbnail)
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.38,
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 65, sigmaY: 65),
+                  child: Transform.scale(
+                    scale: 1.4,
+                    child: Image.network(
+                      item.thumbnailUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
+              ),
+            )
+          else
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      theme.colorScheme.primary.withAlpha(45),
+                      surfaceColor,
                     ],
                   ),
+                ),
+              ),
+            ),
 
-                  const SizedBox(height: 12),
+          // 3. Smooth Vignette & Bottom Surface Fade Gradient
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withAlpha(90),
+                    Colors.black.withAlpha(75),
+                    surfaceColor.withAlpha(220),
+                    surfaceColor,
+                  ],
+                  stops: const [0.0, 0.35, 0.72, 1.0],
+                ),
+              ),
+            ),
+          ),
 
-            // Artwork with Double-Tap to Seek (+/- 10s) and Ambient Glow
-            Center(
+          // 4. Foreground Content (Full-Screen Spaced Layout)
+          SafeArea(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onVerticalDragEnd: (details) {
+                if ((details.primaryVelocity ?? 0.0) > 280) {
+                  Navigator.of(context).pop();
+                }
+              },
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final screenHeight = MediaQuery.sizeOf(context).height;
-                  final maxArtworkHeight = screenHeight > 0 ? (screenHeight * 0.34) : 280.0;
-                  final artworkWidth = constraints.maxWidth.clamp(0.0, maxArtworkHeight.clamp(200.0, 300.0));
-                  return Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Ambient Glow behind album artwork
-                      Container(
-                        width: artworkWidth * 0.82,
-                        height: artworkWidth * 0.82,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: theme.colorScheme.primary.withAlpha(55),
-                              blurRadius: 65,
-                              spreadRadius: 8,
+                  final screenHeight = constraints.maxHeight;
+                  final maxArtworkHeight = (screenHeight > 0 ? screenHeight * 0.35 : 260.0)
+                      .clamp(180.0, 300.0);
+                  final artworkWidth = (constraints.maxWidth - 48).clamp(0.0, maxArtworkHeight);
+                  final gap = ((screenHeight - 264 - artworkWidth) / 3).clamp(8.0, 48.0);
+
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Top Bar: Minimize arrow, Center "NOW PLAYING" & channel name, Right Playlist Add
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            IconButton(
+                              iconSize: 28,
+                              visualDensity: VisualDensity.compact,
+                              icon: const Icon(Icons.keyboard_arrow_down),
+                              tooltip: 'Minimize',
+                              onPressed: () => Navigator.of(context).pop(),
+                            ),
+                            Expanded(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'NOW PLAYING',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      letterSpacing: 1.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: theme.colorScheme.onSurfaceVariant.withAlpha(210),
+                                      fontSize: 10.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    item.channelName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: theme.colorScheme.onSurface,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              iconSize: 24,
+                              visualDensity: VisualDensity.compact,
+                              icon: const Icon(Icons.playlist_add),
+                              tooltip: 'Add to playlist',
+                              onPressed: () => AddToPlaylistDialog.show(
+                                context,
+                                item: item,
+                                storageService: storage,
+                              ),
                             ),
                           ],
                         ),
-                      ),
-                      GestureDetector(
+
+                        SizedBox(height: gap),
+
+                        // Center Artwork with Double-Tap to Seek (+/- 10s) and Ambient Natural Shadow
+                        Center(
+                                child: GestureDetector(
                         key: const ValueKey('full_player_track_card'),
                         onDoubleTapDown: (details) =>
                             _onDoubleTapDown(details, artworkWidth),
@@ -560,12 +594,9 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                           ),
                         ),
                       ),
-                    ],
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 20),
+                    ),
+
+                    SizedBox(height: gap),
 
             // Title, Channel & Favorite
             Row(
@@ -713,7 +744,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: gap),
 
             // Bottom Icon Toolbar: Speed badge, Sleep timer, PDF Reader, Download, Queue
             Padding(
@@ -908,10 +939,13 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
             ),
           ],
         ),
-      ),
-    ),
+      );
+    },
   ),
 ),
+          ),
+        ],
+      ),
     );
   }
 }
