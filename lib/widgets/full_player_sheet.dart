@@ -238,16 +238,6 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
     }
   }
 
-  String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes;
-    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
-    if (duration.inHours > 0) {
-      final hours = duration.inHours;
-      final remainingMins = (minutes % 60).toString().padLeft(2, '0');
-      return '$hours:$remainingMins:$seconds';
-    }
-    return '$minutes:$seconds';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -269,15 +259,6 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
     final isDownloading = downloadService?.isDownloading(item.id) ?? false;
     final attachedPdfPath = storage.getTrackPdfPath(item.id, title: item.title);
     final hasAttachedPdf = BookService.isPdfFileValid(attachedPdfPath);
-    final duration = playback.duration > Duration.zero
-        ? playback.duration
-        : (item.duration ?? Duration.zero);
-    final position = playback.position;
-    final maxSeconds = duration.inSeconds.toDouble();
-    final currentSeconds = position.inSeconds.toDouble().clamp(
-      0.0,
-      maxSeconds > 0 ? maxSeconds : 1.0,
-    );
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -579,42 +560,9 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
             const SizedBox(height: 12),
 
             // Scrub Bar
-            SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                trackHeight: 3.5,
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                activeTrackColor: theme.colorScheme.primary,
-                thumbColor: theme.colorScheme.primary,
-              ),
-              child: Slider(
-                value: currentSeconds,
-                min: 0.0,
-                max: maxSeconds > 0 ? maxSeconds : 1.0,
-                onChanged: maxSeconds > 0
-                    ? (val) => playback.seek(Duration(seconds: val.toInt()))
-                    : null,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    _formatDuration(position),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  Text(
-                    _formatDuration(duration),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
+            _PlayerScrubber(
+              playback: playback,
+              item: item,
             ),
             const SizedBox(height: 14),
 
@@ -949,4 +897,111 @@ void showSpeedPickerSheet(BuildContext context, PlaybackController playback) {
       ),
     ),
   );
+}
+
+class _PlayerScrubber extends StatefulWidget {
+  const _PlayerScrubber({
+    required this.playback,
+    required this.item,
+  });
+
+  final PlaybackController playback;
+  final dynamic item;
+
+  @override
+  State<_PlayerScrubber> createState() => _PlayerScrubberState();
+}
+
+class _PlayerScrubberState extends State<_PlayerScrubber> {
+  double? _dragSeconds;
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes;
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    if (duration.inHours > 0) {
+      final hours = duration.inHours;
+      final remainingMins = (minutes % 60).toString().padLeft(2, '0');
+      return '$hours:$remainingMins:$seconds';
+    }
+    return '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final playback = widget.playback;
+
+    return ValueListenableBuilder<Duration>(
+      valueListenable: playback.positionNotifier,
+      builder: (context, position, _) {
+        final duration = playback.duration > Duration.zero
+            ? playback.duration
+            : (widget.item.duration ?? Duration.zero);
+        final maxSeconds = duration.inSeconds.toDouble();
+        final currentSeconds = (_dragSeconds ?? position.inSeconds.toDouble())
+            .clamp(0.0, maxSeconds > 0 ? maxSeconds : 1.0)
+            .toDouble();
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                trackHeight: 3.5,
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                activeTrackColor: theme.colorScheme.primary,
+                thumbColor: theme.colorScheme.primary,
+              ),
+              child: Slider(
+                value: currentSeconds,
+                min: 0.0,
+                max: maxSeconds > 0 ? maxSeconds : 1.0,
+                onChangeStart: maxSeconds > 0
+                    ? (val) {
+                        setState(() => _dragSeconds = val);
+                      }
+                    : null,
+                onChanged: maxSeconds > 0
+                    ? (val) {
+                        setState(() => _dragSeconds = val);
+                      }
+                    : null,
+                onChangeEnd: maxSeconds > 0
+                    ? (val) {
+                        setState(() => _dragSeconds = null);
+                        playback.seek(Duration(seconds: val.toInt()));
+                      }
+                    : null,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _formatDuration(
+                      _dragSeconds != null
+                          ? Duration(seconds: _dragSeconds!.toInt())
+                          : position,
+                    ),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  Text(
+                    _formatDuration(duration),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }

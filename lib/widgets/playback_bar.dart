@@ -28,15 +28,6 @@ class PlaybackBar extends StatelessWidget {
         if (item == null) return const SizedBox.shrink();
 
         final theme = Theme.of(context);
-        final duration = controller.duration.inMilliseconds > 0
-            ? controller.duration.inMilliseconds.toDouble()
-            : (item.duration?.inMilliseconds.toDouble() ?? 1.0);
-        final position = controller.position.inMilliseconds.toDouble();
-        final progress = (position / (duration > 0 ? duration : 1.0)).clamp(
-          0.0,
-          1.0,
-        );
-
         final error = controller.error;
         final status =
             error ??
@@ -228,21 +219,45 @@ class PlaybackBar extends StatelessWidget {
                       ),
 
                       // Bottom-pinned curved progress bar
-                      ClipRRect(
-                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8)),
-                        child: LinearProgressIndicator(
-                          value: controller.isLoading ? null : progress,
-                          minHeight: 2.5,
-                          backgroundColor: theme.colorScheme.outlineVariant.withAlpha(60),
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            theme.colorScheme.primary,
-                          ),
-                        ),
-                      ),
+                      _PlaybackProgressBar(controller: controller),
                     ],
                   ),
                 ),
               ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PlaybackProgressBar extends StatelessWidget {
+  const _PlaybackProgressBar({required this.controller});
+
+  final PlaybackController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ValueListenableBuilder<Duration>(
+      valueListenable: controller.positionNotifier,
+      builder: (context, position, _) {
+        final totalDuration = controller.duration.inMilliseconds > 0
+            ? controller.duration.inMilliseconds.toDouble()
+            : (controller.selected?.duration?.inMilliseconds.toDouble() ?? 1.0);
+        final progress = (position.inMilliseconds /
+                (totalDuration > 0 ? totalDuration : 1.0))
+            .clamp(0.0, 1.0);
+
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8)),
+          child: LinearProgressIndicator(
+            value: controller.isLoading ? null : progress,
+            minHeight: 2.5,
+            backgroundColor: theme.colorScheme.outlineVariant.withAlpha(60),
+            valueColor: AlwaysStoppedAnimation<Color>(
+              theme.colorScheme.primary,
             ),
           ),
         );

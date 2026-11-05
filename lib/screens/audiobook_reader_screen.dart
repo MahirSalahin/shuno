@@ -630,49 +630,63 @@ class _AudiobookReaderScreenState extends State<AudiobookReaderScreen> {
                         listenable: widget.playback,
                         builder: (context, _) {
                           final playback = widget.playback;
-                          final position = playback.position;
-                          final duration = playback.duration;
-                          final maxSeconds = duration.inSeconds > 0 ? duration.inSeconds.toDouble() : 1.0;
-                          final curSeconds = position.inSeconds.toDouble().clamp(0.0, maxSeconds);
                           final isPlaying = playback.isPlaying;
                           final isBuffering = playback.isBuffering;
 
                           return Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    _formatDuration(position),
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: SliderTheme(
-                                      data: SliderTheme.of(context).copyWith(
-                                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-                                        trackHeight: 2.5,
-                                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+                              ValueListenableBuilder<Duration>(
+                                valueListenable: playback.positionNotifier,
+                                builder: (context, position, _) {
+                                  final duration = playback.duration;
+                                  final maxSeconds = duration.inSeconds > 0
+                                      ? duration.inSeconds.toDouble()
+                                      : 1.0;
+                                  final curSeconds = position.inSeconds
+                                      .toDouble()
+                                      .clamp(0.0, maxSeconds);
+
+                                  return Row(
+                                    children: [
+                                      Text(
+                                        _formatDuration(position),
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          color: theme.colorScheme.onSurfaceVariant,
+                                        ),
                                       ),
-                                      child: Slider(
-                                        value: curSeconds,
-                                        min: 0.0,
-                                        max: maxSeconds,
-                                        onChanged: (val) {
-                                          playback.seek(Duration(seconds: val.toInt()));
-                                          _onUserInteracted();
-                                        },
+                                      Expanded(
+                                        child: SliderTheme(
+                                          data: SliderTheme.of(context).copyWith(
+                                            thumbShape:
+                                                const RoundSliderThumbShape(
+                                                    enabledThumbRadius: 5),
+                                            trackHeight: 2.5,
+                                            overlayShape:
+                                                const RoundSliderOverlayShape(
+                                                    overlayRadius: 10),
+                                          ),
+                                          child: Slider(
+                                            value: curSeconds,
+                                            min: 0.0,
+                                            max: maxSeconds,
+                                            onChanged: (val) {
+                                              playback.seek(
+                                                  Duration(seconds: val.toInt()));
+                                              _onUserInteracted();
+                                            },
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                  Text(
-                                    _formatDuration(duration),
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ],
+                                      Text(
+                                        _formatDuration(duration),
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          color: theme.colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
                               ),
 
                               Row(
@@ -717,7 +731,7 @@ class _AudiobookReaderScreenState extends State<AudiobookReaderScreen> {
                                     icon: const Icon(Icons.replay_10, size: 24),
                                     tooltip: 'Back 10 seconds',
                                     onPressed: () {
-                                      final target = position - const Duration(seconds: 10);
+                                      final target = playback.position - const Duration(seconds: 10);
                                       playback.seek(target < Duration.zero ? Duration.zero : target);
                                       _onUserInteracted();
                                     },
@@ -754,8 +768,9 @@ class _AudiobookReaderScreenState extends State<AudiobookReaderScreen> {
                                     icon: const Icon(Icons.forward_10, size: 24),
                                     tooltip: 'Forward 10 seconds',
                                     onPressed: () {
-                                      final target = position + const Duration(seconds: 10);
-                                      playback.seek(target > duration ? duration : target);
+                                      final target = playback.position + const Duration(seconds: 10);
+                                      final dur = playback.duration;
+                                      playback.seek(target > dur ? dur : target);
                                       _onUserInteracted();
                                     },
                                   ),

@@ -52,6 +52,12 @@ class PlaybackController extends ChangeNotifier {
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   Duration _bufferedPosition = Duration.zero;
+  late final ValueNotifier<Duration> _positionNotifier =
+      ValueNotifier<Duration>(_position);
+  late final ValueNotifier<Duration> _durationNotifier =
+      ValueNotifier<Duration>(_duration);
+  late final ValueNotifier<Duration> _bufferedPositionNotifier =
+      ValueNotifier<Duration>(_bufferedPosition);
 
   Timer? _sleepTimer;
   Timer? _sleepTimerTicker;
@@ -74,6 +80,10 @@ class PlaybackController extends ChangeNotifier {
   Duration get position => _position;
   Duration get duration => _duration;
   Duration get bufferedPosition => _bufferedPosition;
+  ValueListenable<Duration> get positionNotifier => _positionNotifier;
+  ValueListenable<Duration> get durationNotifier => _durationNotifier;
+  ValueListenable<Duration> get bufferedPositionNotifier =>
+      _bufferedPositionNotifier;
   bool get hasNext =>
       _loopMode == PlaybackLoopMode.all ||
       _currentIndex + 1 < _queue.length ||
@@ -180,14 +190,15 @@ class PlaybackController extends ChangeNotifier {
     _positionSubscription ??= player.positionStream.listen((pos) {
       if (!_disposed) {
         _position = pos;
+        _positionNotifier.value = pos;
         _saveOfflinePositionIfNeeded(pos);
-        notifyListeners();
       }
     });
 
     _durationSubscription ??= player.durationStream.listen((dur) {
       if (!_disposed && dur != null) {
         _duration = dur;
+        _durationNotifier.value = dur;
         notifyListeners();
       }
     });
@@ -195,7 +206,7 @@ class PlaybackController extends ChangeNotifier {
     _bufferedSubscription ??= player.bufferedPositionStream.listen((buf) {
       if (!_disposed) {
         _bufferedPosition = buf;
-        notifyListeners();
+        _bufferedPositionNotifier.value = buf;
       }
     });
 
@@ -328,7 +339,9 @@ class PlaybackController extends ChangeNotifier {
     _error = null;
     _loading = true;
     _position = initialPosition ?? Duration.zero;
+    _positionNotifier.value = _position;
     _duration = item.duration ?? Duration.zero;
+    _durationNotifier.value = _duration;
     notifyListeners();
 
     try {
@@ -350,6 +363,7 @@ class PlaybackController extends ChangeNotifier {
       }
       if (startPos != null) {
         _position = startPos;
+        _positionNotifier.value = startPos;
       }
 
       final mediaItem = MediaItem(
@@ -509,8 +523,9 @@ class PlaybackController extends ChangeNotifier {
   Future<void> seek(Duration position) async {
     if (_disposed || _player == null) return;
     try {
-      await _player!.seek(position);
       _position = position;
+      _positionNotifier.value = position;
+      await _player!.seek(position);
       _saveOfflinePositionIfNeeded(position, force: true);
       notifyListeners();
     } catch (_) {}
@@ -622,6 +637,9 @@ class PlaybackController extends ChangeNotifier {
     unawaited(_durationSubscription?.cancel());
     unawaited(_bufferedSubscription?.cancel());
     unawaited(_player?.dispose());
+    _positionNotifier.dispose();
+    _durationNotifier.dispose();
+    _bufferedPositionNotifier.dispose();
     super.dispose();
   }
 }
