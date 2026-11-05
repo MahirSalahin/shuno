@@ -237,6 +237,15 @@ class PlaybackController extends ChangeNotifier {
     }
   }
 
+  void preWarmTrack(String videoId, {bool highQuality = true}) {
+    if (_disposed) return;
+    unawaited(
+      _youtubeService
+          .resolveAudioUrl(videoId, highQuality: highQuality)
+          .catchError((_) => Uri()),
+    );
+  }
+
   Future<void> playItem(YoutubeSearchItem item, {Duration? initialPosition}) async {
     if (_disposed || _loading) return;
     // If item is already in queue, jump to it. Otherwise, insert after current track.
@@ -552,11 +561,7 @@ class PlaybackController extends ChangeNotifier {
 
         // Pre-warm audio stream resolution while network and wake-lock are active
         final highQuality = (_storageService?.audioQuality ?? 'high') == 'high';
-        unawaited(
-          _youtubeService
-              .resolveAudioUrl(nextItem.id, highQuality: highQuality)
-              .catchError((_) => Uri()),
-        );
+        preWarmTrack(nextItem.id, highQuality: highQuality);
       }
     } catch (e) {
       if (kDebugMode) debugPrint('Autoplay staging failed: $e');

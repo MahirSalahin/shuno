@@ -62,10 +62,12 @@ class YoutubeService {
 
   final Map<String, _CachedStreamUrl> _streamUrlCache = {};
   final Map<String, _CachedSearchResult> _searchCache = {};
+  final Map<String, Future<Uri>> _inFlightResolutions = {};
 
   void dispose() {
     _streamUrlCache.clear();
     _searchCache.clear();
+    _inFlightResolutions.clear();
     _client?.close();
     _client = null;
   }
@@ -73,6 +75,8 @@ class YoutubeService {
   void clearCachedUrl(String videoId) {
     _streamUrlCache.remove('$videoId-true');
     _streamUrlCache.remove('$videoId-false');
+    _inFlightResolutions.remove('$videoId-true');
+    _inFlightResolutions.remove('$videoId-false');
   }
 
   @visibleForTesting
@@ -80,6 +84,9 @@ class YoutubeService {
     final cached = _streamUrlCache['$videoId-$highQuality'];
     return cached != null && !cached.isExpired;
   }
+
+  @visibleForTesting
+  Uri cacheResolvedUrl(String cacheKey, Uri url) => _cacheResolvedUrl(cacheKey, url);
 
   Uri _cacheResolvedUrl(String cacheKey, Uri url) {
     DateTime expiresAt;
@@ -113,6 +120,30 @@ class YoutubeService {
       return cached.url;
     }
 
+    final inFlight = _inFlightResolutions[cacheKey];
+    if (inFlight != null) {
+      return await inFlight;
+    }
+
+    final future = resolveAudioUrlInternal(
+      videoId,
+      highQuality: highQuality,
+      cacheKey: cacheKey,
+    );
+    _inFlightResolutions[cacheKey] = future;
+    try {
+      return await future;
+    } finally {
+      _inFlightResolutions.remove(cacheKey);
+    }
+  }
+
+  @visibleForTesting
+  Future<Uri> resolveAudioUrlInternal(
+    String videoId, {
+    required bool highQuality,
+    required String cacheKey,
+  }) async {
     final youtube = _yt;
     StreamManifest manifest;
     try {
@@ -127,12 +158,12 @@ class YoutubeService {
             ],
             requireWatchPage: false,
           )
-          .timeout(const Duration(seconds: 25));
+          .timeout(const Duration(seconds: 20));
     } catch (e) {
       if (kDebugMode) debugPrint('InnerTube direct manifest fetch failed ($e), falling back...');
       manifest = await youtube.videos.streamsClient
           .getManifest(videoId)
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 25));
     }
 
     // Prioritize Stream 18 (universal 360p MP4 with AAC stereo audio, ratebypass=yes, unthrottled)
