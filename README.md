@@ -1,73 +1,117 @@
 # Shuno
 
-A small personal-only YouTube audio client for Android built with Flutter.
+A modern, **100% ad-free**, local-first audio player built with Flutter, designed specifically for an immersive **Audiobook + PDF Reading** experience, podcast listening, and long-form spoken-word audio.
 
-Shuno provides a clean music-style experience: search YouTube, maintain an active queue, create local playlists, manage favorites and history, download songs for offline playback, and continue listening in the background with lock-screen and notification controls when the screen is turned off.
+---
 
-## Features
+## Highlights
 
-- **Audio Playback**: Streaming playback powered by `just_audio` with scrubber, buffer progress, and quality selection.
-- **Background & Screen-Off Playback**: Android foreground media service (`audio_service` / `just_audio_background`) with wake-lock support.
-- **Notification & Lock-Screen Controls**: System media notification with artwork, track title, channel, play/pause, next/previous, and seek bar.
-- **Queue Management**: Active queue with now-playing indicator, drag-to-reorder, swipe-to-delete, play next, and clear queue.
-- **Autoplay**: When the queue finishes, automatically resolves and queues related YouTube tracks to keep playback going.
-- **Next / Previous**: Skip controls on the mini player, full-screen player, and system notification.
-- **Local Playlists**: Create custom playlists, add/remove tracks, rename, and play whole playlists with one tap.
-- **Favorites**: One-tap heart toggle on any track, with a dedicated Favorites tab in Library.
-- **Play History**: Automatic timestamped log of recently played tracks with replay and clear history options.
-- **Downloads & Offline Playback**: Save audio streams directly to local storage (`downloads/<id>.m4a`) and listen 100% offline without internet.
-- **Local Persistence**: Zero-database JSON storage (`shuno_data.json`) via `path_provider` (pure Dart, fast, no `build_runner` or ORM bloat).
-- **Settings**: Toggle autoplay, choose preferred audio quality (High vs Data Saver), and manage storage / clear cache.
-- **Polished Material 3 UI**: Dark theme with mint/teal accents, persistent mini player, expandable full-screen now-playing sheet, and intuitive bottom navigation.
+### 📖 Immersive Audiobook + PDF Reader
+- **Simultaneous Read & Listen**: Read the original book or document while listening to the narration.
+- **Distraction-Free Immersion**: Audio controls and top app bars dim and fade smoothly while reading, giving you maximum screen space for reading.
+- **Smart Sibling Matching**: Automatically detects multi-part audiobook tracks and associates them with the same book PDF across your library.
+- **Dual Bookmarking**: Automatically persists your exact reading page and audio playback position across sessions.
+- **Fluid PDF Navigation**: Fast page-jumping slider, grid preview, and title management.
 
-## Architecture
+### 🚫 100% Ad-Free & Distraction-Free
+- Zero advertisements, zero interruptions, and zero commercial banners.
+- No accounts, logins, subscriptions, or tracking. Your listening habits stay private on your device.
 
-Built adhering strictly to **KISS**, **DRY**, and **YAGNI**:
-- No external state-management frameworks (uses native `ChangeNotifier`).
-- No heavy databases or code generation (clean JSON persistence).
-- No backend servers or user accounts (personal, local-first client).
+### 🎧 Audio & Podcast Playback
+- **Fine-Grained Speed Control**: Adjust playback speed from `0.75x` up to `2.5x` with pitch preservation.
+- **Quick Scrubbing**: Double-tap the player or reader to skip 10 seconds backward or forward with visual feedback.
+- **Custom Sleep Timer**: Set a countdown timer (`15m`, `30m`, `45m`, `60m`) or stop playback automatically at the **End of Track**.
+- **Background & Screen-Off Playback**: Native foreground audio service with persistent system notification and lock-screen controls.
+
+### 💾 Offline Listening & Local-First Storage
+- **Download for Offline Listening**: Save audio tracks directly to device storage for 100% offline access when traveling.
+- **Resume Where You Left Off**: Automatically remembers your last playback position for offline audio tracks.
+- **Local JSON Persistence**: Lightweight, battery-efficient local storage without heavy databases or external services.
+
+### 🗂️ Library & Queue Management
+- **Custom Playlists**: Group audiobook chapters or podcast series into custom playlists.
+- **Active Queue**: Reorder upcoming tracks with drag-and-drop, play next, or swipe to dismiss.
+- **Favorites & History**: Quick-access bookmarks and timestamped listening history.
+- **Theming**: Material 3 dark design with interchangeable color palettes (*Emerald*, *Cyan*, *Amethyst*, *Amber*).
+
+---
+
+## Architecture Overview
+
+Built following clean architecture principles (**KISS**, **DRY**, **YAGNI**):
+- **Zero bloat**: Uses native Flutter state management (`ChangeNotifier` / `ValueNotifier`) without heavy third-party framework overhead.
+- **Efficient UI rendering**: Scoped rebuilds and isolated stream notifiers ensure smooth scrolling and low battery consumption.
+- **Offline-first**: All preferences, bookmarks, playlists, and downloads reside locally on-device.
 
 ```text
 lib/
-  main.dart                           # App entry, JustAudioBackground setup, Theme
+  main.dart                           # App lifecycle, background audio setup, theme builder
   models/
-    youtube_search_item.dart          # Track model with JSON serialization and formatting
-    playlist.dart                     # User playlist model
-    download_item.dart                # Downloaded track metadata and file size
+    audio_item.dart                   # Audio track model & metadata serialization
+    playlist.dart                     # Custom playlist model
+    download_item.dart                # Offline audio metadata & position tracking
   services/
-    youtube_service.dart              # Search, audio stream resolution, and related videos
-    playback_controller.dart          # Queue, player state, loop modes, shuffle, background sync
-    storage_service.dart              # JSON persistence for favorites, history, playlists, downloads, settings
-    download_service.dart             # Chunked stream downloading to disk with progress tracking
+    audio_service.dart                # Audio track resolution and search services
+    playback_controller.dart          # Playback state, queue, loop/shuffle, and speed controls
+    storage_service.dart              # Local JSON persistence with debounced writes
+    download_service.dart             # Local audio downloader and progress manager
+    book_service.dart                 # PDF validation, title sanitization, and query matching
   screens/
-    home_navigation_screen.dart       # Scaffold with NavigationBar and docked PlaybackBar
-    search_screen.dart                # YouTube search with quick chips and Action menus
+    home_navigation_screen.dart       # Bottom navigation container with docked mini-player
+    search_screen.dart                # Audio discovery & catalog exploration
     library_screen.dart               # Tabbed library (Playlists, Favorites, History, Downloads)
-    playlist_detail_screen.dart       # Playlist tracks view, play all, edit/delete
-    queue_screen.dart                 # Reorderable upcoming queue, clear queue
-    settings_screen.dart              # Preferences and storage management
+    playlist_detail_screen.dart       # Playlist track list, reordering, and batch management
+    queue_screen.dart                 # Reorderable active playback queue
+    settings_screen.dart              # Audio quality, themes, and storage management
+    audiobook_reader_screen.dart      # Immersive PDF reader with audio playback dock
   widgets/
-    playback_bar.dart                 # Persistent mini player with progress indicator
-    full_player_sheet.dart            # Expandable full now-playing sheet with scrub bar
-    track_tile.dart                   # Reusable track tile with popups (Play, Queue, Playlist, Favorite, Download)
-    add_to_playlist_dialog.dart       # Dialog to add songs to existing or new playlists
+    playback_bar.dart                 # Persistent bottom mini-player with isolated progress bar
+    full_player_sheet.dart            # Expandable full now-playing sheet with isolated scrubber
+    track_tile.dart                   # Modular track tile with PDF indicators and quick actions
+    attach_pdf_sheet.dart             # PDF selector and local file attachment modal
 ```
 
-## Running on Android
+---
 
-From PowerShell:
+## Getting Started
 
-```powershell
-Set-Location F:\Programs\Flutter\shuno
+### Prerequisites
+- [Flutter SDK](https://docs.flutter.dev/get-started/install) (v3.19.0 or higher)
+- Android SDK with API Level 21+
+
+### Build & Run
+
+```bash
+# Clone the repository
+git clone https://github.com/your-username/shuno.git
+cd shuno
+
+# Install dependencies
 flutter pub get
-flutter devices
-flutter run -d <android-device-id>
-```
 
-## Verification
+# Run on a connected device
+flutter run
 
-```powershell
-flutter analyze
+# Run automated tests
 flutter test
-flutter build apk --debug
+
+# Build release APK
+flutter build apk --release
 ```
+
+---
+
+## Disclaimer & Legal Notice
+
+> [!IMPORTANT]
+> This software is provided strictly for **educational, personal, and research purposes**.
+
+- **No Media Hosting**: This repository does not host, store, or distribute any copyrighted media, audio files, or book documents. All media streams, metadata, and files accessed or played through this application originate from third-party endpoints or files supplied locally by the end-user.
+- **Third-Party Terms & Compliance**: The authors and contributors of this project do not endorse, encourage, or facilitate the unauthorized downloading, distribution, or circumvention of terms of any third-party content providers. Users are solely responsible for ensuring that their use of this software complies with all applicable local, national, and international laws, regulations, and third-party Terms of Service.
+- **Limitation of Liability**: Under no circumstances shall the authors, maintainers, or copyright holders of this repository be held liable for any claim, damages, legal actions, copyright infringements, or other liabilities arising from the use, misuse, modification, or redistribution of this software or its source code by third parties.
+
+---
+
+## License
+
+This project is licensed under the terms of the [MIT License](LICENSE).
