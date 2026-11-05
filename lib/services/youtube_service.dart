@@ -1099,53 +1099,148 @@ class YoutubeService {
   }
 
 
+  @visibleForTesting
+  static String? getNextSeriesQuery(String title, String channelName) =>
+      _getNextSeriesQuery(title, channelName);
+
+  static String? _getNextSeriesQuery(String title, String channelName) {
+    // 1. Numerator fraction e.g. "1/6", "01/12", "1 / 6"
+    final fractionRegex = RegExp(r'(\b)(\d+)\s*/\s*(\d+)(\b)');
+    final fractionMatch = fractionRegex.firstMatch(title);
+    if (fractionMatch != null) {
+      final numStr = fractionMatch.group(2)!;
+      final totalStr = fractionMatch.group(3)!;
+      final currentNum = int.tryParse(numStr);
+      final total = int.tryParse(totalStr);
+      if (currentNum != null && total != null && currentNum < total) {
+        final nextNum = currentNum + 1;
+        final nextNumStr = nextNum.toString().padLeft(numStr.length, '0');
+        final nextTitle = title.replaceRange(
+          fractionMatch.start,
+          fractionMatch.end,
+          '${fractionMatch.group(1)}$nextNumStr/$totalStr${fractionMatch.group(4)}',
+        );
+        return '$nextTitle $channelName'.trim();
+      }
+    }
+
+    // 2. Part / Episode / Chapter / Vol / Volume e.g. "Part 1", "Episode 02", "Ch. 3", "Pt. 4", "Vol 1"
+    final seriesRegex = RegExp(
+      r'\b(part|pt\.?|episode|ep\.?|chapter|ch\.?|vol\.?|volume)\s*[-_:]?\s*(\d+)\b',
+      caseSensitive: false,
+    );
+    final seriesMatch = seriesRegex.firstMatch(title);
+    if (seriesMatch != null) {
+      final prefix = seriesMatch.group(1)!;
+      final numStr = seriesMatch.group(2)!;
+      final currentNum = int.tryParse(numStr);
+      if (currentNum != null && currentNum < 9999) {
+        final nextNum = currentNum + 1;
+        final nextNumStr = nextNum.toString().padLeft(numStr.length, '0');
+        final nextTitle = title.replaceRange(
+          seriesMatch.start,
+          seriesMatch.end,
+          '$prefix $nextNumStr',
+        );
+        return '$nextTitle $channelName'.trim();
+      }
+    }
+
+    // 3. Track / # notation e.g. "#1", "# 01"
+    final hashRegex = RegExp(r'#\s*(\d+)\b');
+    final hashMatch = hashRegex.firstMatch(title);
+    if (hashMatch != null) {
+      final numStr = hashMatch.group(1)!;
+      final currentNum = int.tryParse(numStr);
+      if (currentNum != null && currentNum < 9999) {
+        final nextNum = currentNum + 1;
+        final nextNumStr = nextNum.toString().padLeft(numStr.length, '0');
+        final nextTitle = title.replaceRange(
+          hashMatch.start,
+          hashMatch.end,
+          '#$nextNumStr',
+        );
+        return '$nextTitle $channelName'.trim();
+      }
+    }
+
+    return null;
+  }
+
   Future<List<YoutubeSearchItem>> getRelatedVideos(
     YoutubeSearchItem currentItem,
   ) async {
-    final youtube = YoutubeExplode();
-    try {
+    final results = <YoutubeSearchItem>[];
+    final seenIds = <String>{currentItem.id};
+
+    // 1. If this is an episodic/chapter series track, query for the next part first
+    final nextSeriesQuery = _getNextSeriesQuery(currentItem.title, currentItem.channelName);
+    if (nextSeriesQuery != null) {
       try {
-        final video = await youtube.videos.get(currentItem.id);
-        final related = await youtube.videos.getRelatedVideos(video);
-        if (related != null && related.isNotEmpty) {
-          return related
-              .where((v) => v.id.value != currentItem.id)
-              .map(
-                (v) => YoutubeSearchItem(
-                  id: v.id.value,
-                  title: v.title,
-                  channelName: v.author,
-                  thumbnailUrl: ThumbnailSet(v.id.value).mediumResUrl,
-                  duration: v.duration,
-                ),
-              )
-              .toList();
+        final seriesResults = await _yt.search
+            .searchContent(nextSeriesQuery, filter: TypeFilters.video)
+            .timeout(const Duration(seconds: 8));
+        for (final v in seriesResults.whereType<SearchVideo>()) {
+          if (seenIds.add(v.id.value)) {
+            results.add(
+              YoutubeSearchItem(
+                id: v.id.value,
+                title: v.title,
+                channelName: v.author,
+                thumbnailUrl: ThumbnailSet(v.id.value).mediumResUrl,
+                duration: _parseDuration(v.duration),
+              ),
+            );
+          }
         }
-      } catch (_) {
-        // Fallback to query below
-      }
-
-      final query = '${currentItem.title} ${currentItem.channelName}';
-      final results = await youtube.search
-          .searchContent(query, filter: TypeFilters.video)
-          .timeout(const Duration(seconds: 15));
-
-      return results
-          .whereType<SearchVideo>()
-          .where((v) => v.id.value != currentItem.id)
-          .map(
-            (v) => YoutubeSearchItem(
-              id: v.id.value,
-              title: v.title,
-              channelName: v.author,
-              thumbnailUrl: ThumbnailSet(v.id.value).mediumResUrl,
-              duration: _parseDuration(v.duration),
-            ),
-          )
-          .toList();
-    } finally {
-      youtube.close();
+      } catch (_) {}
     }
+
+    // 2. Fetch related videos using shared client with strict timeout
+    try {
+      final video = await _yt.videos.get(currentItem.id).timeout(const Duration(seconds: 7));
+      final related = await _yt.videos.getRelatedVideos(video).timeout(const Duration(seconds: 7));
+      if (related != null) {
+        for (final v in related) {
+          if (seenIds.add(v.id.value)) {
+            results.add(
+              YoutubeSearchItem(
+                id: v.id.value,
+                title: v.title,
+                channelName: v.author,
+                thumbnailUrl: ThumbnailSet(v.id.value).mediumResUrl,
+                duration: v.duration,
+              ),
+            );
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 3. Fallback search query if no results obtained yet
+    if (results.isEmpty) {
+      try {
+        final query = '${currentItem.title} ${currentItem.channelName}'.trim();
+        final searchResults = await _yt.search
+            .searchContent(query, filter: TypeFilters.video)
+            .timeout(const Duration(seconds: 8));
+        for (final v in searchResults.whereType<SearchVideo>()) {
+          if (seenIds.add(v.id.value)) {
+            results.add(
+              YoutubeSearchItem(
+                id: v.id.value,
+                title: v.title,
+                channelName: v.author,
+                thumbnailUrl: ThumbnailSet(v.id.value).mediumResUrl,
+                duration: _parseDuration(v.duration),
+              ),
+            );
+          }
+        }
+      } catch (_) {}
+    }
+
+    return results;
   }
 
   static List<YoutubeChannelItem> _extractChannelsFromJson(dynamic data) {

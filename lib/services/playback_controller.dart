@@ -44,6 +44,8 @@ class PlaybackController extends ChangeNotifier {
   bool _disposed = false;
   bool _foreground = true;
   int _request = 0;
+  bool _isHandlingTrackCompletion = false;
+  bool _isStagingAutoplay = false;
 
   PlaybackLoopMode _loopMode = PlaybackLoopMode.off;
   bool _isShuffle = false;
@@ -175,7 +177,7 @@ class PlaybackController extends ChangeNotifier {
     _stateSubscription ??= player.playerStateStream.listen((state) {
       if (_disposed) return;
       if (state.processingState == ProcessingState.completed) {
-        _onTrackCompleted();
+        Future.microtask(_onTrackCompleted);
       }
       notifyListeners();
     });
@@ -419,6 +421,7 @@ class PlaybackController extends ChangeNotifier {
       if ((_foreground || !_pauseOnBackground) && _error == null) {
         unawaited(_play(request));
       }
+      unawaited(_stageAutoplayNextTrackIfNeeded());
     } catch (error, stack) {
       if (_disposed || request != _request) return;
       debugPrint('Audio load failed: $error\n$stack');
@@ -458,6 +461,7 @@ class PlaybackController extends ChangeNotifier {
         if (!_disposed && (_foreground || !_pauseOnBackground)) {
           unawaited(_play(_request));
         }
+        unawaited(_stageAutoplayNextTrackIfNeeded());
       }
     } catch (_) {
       if (!_disposed) {
@@ -470,10 +474,18 @@ class PlaybackController extends ChangeNotifier {
   Future<void> skipToNext() async {
     if (_disposed || _loading) return;
 
-    if (_currentIndex + 1 < _queue.length) {
+    // 1. Try remaining tracks in the queue first
+    while (_currentIndex + 1 < _queue.length) {
       _currentIndex++;
       await _loadAndPlay(_queue[_currentIndex]);
-      return;
+      if (_error == null) {
+        return;
+      }
+      // If loading this track failed and autoplay is not active, stop and show error
+      if (_storageService?.autoplay != true) {
+        return;
+      }
+      // Autoplay is active: skip past the unplayable track and try next
     }
 
     if (_loopMode == PlaybackLoopMode.all && _queue.isNotEmpty) {
@@ -482,18 +494,26 @@ class PlaybackController extends ChangeNotifier {
       return;
     }
 
-    // Autoplay: fetch related videos if enabled
+    // 2. Autoplay fallback: fetch related videos if enabled and nothing staged yet
     if ((_storageService != null && _storageService.autoplay) && _selected != null) {
       try {
-        final related = await _youtubeService.getRelatedVideos(_selected!);
+        final current = _selected!;
+        final related = await _youtubeService.getRelatedVideos(current);
         if (_disposed) return;
-        final unplayed = related.where((r) => !_queue.any((q) => q.id == r.id));
-        if (unplayed.isNotEmpty) {
-          final nextItem = unplayed.first;
-          _queue.add(nextItem);
+        final unplayed = related.where((r) => !_queue.any((q) => q.id == r.id)).toList();
+
+        // Multi-candidate fallback: try up to 3 candidates so 403 or dead links don't kill autoplay
+        for (final candidate in unplayed.take(3)) {
+          if (_disposed) return;
+          _queue.add(candidate);
           _currentIndex = _queue.length - 1;
-          await _loadAndPlay(nextItem);
-          return;
+          await _loadAndPlay(candidate);
+          if (_error == null) {
+            return;
+          }
+          // Failed to load candidate: remove and try next candidate
+          _queue.removeLast();
+          _currentIndex = _queue.length - 1;
         }
       } catch (e) {
         if (kDebugMode) debugPrint('Autoplay fetch failed: $e');
@@ -502,6 +522,47 @@ class PlaybackController extends ChangeNotifier {
 
     // Otherwise stop playback
     await _player?.stop();
+  }
+
+  Future<void> _stageAutoplayNextTrackIfNeeded() async {
+    if (_disposed || _isStagingAutoplay) return;
+    final storage = _storageService;
+    if (storage == null || !storage.autoplay) return;
+    if (_loopMode != PlaybackLoopMode.off) return;
+
+    // Only stage when at or beyond the current last track of the queue
+    if (_currentIndex + 1 < _queue.length) return;
+    final current = _selected;
+    if (current == null) return;
+
+    _isStagingAutoplay = true;
+    try {
+      final related = await _youtubeService.getRelatedVideos(current);
+      if (_disposed) return;
+      if (_storageService?.autoplay != true) return;
+      if (_loopMode != PlaybackLoopMode.off) return;
+      if (_currentIndex + 1 < _queue.length) return;
+      if (_selected?.id != current.id) return;
+
+      final unplayed = related.where((r) => !_queue.any((q) => q.id == r.id)).toList();
+      if (unplayed.isNotEmpty) {
+        final nextItem = unplayed.first;
+        _queue.add(nextItem);
+        notifyListeners();
+
+        // Pre-warm audio stream resolution while network and wake-lock are active
+        final highQuality = (_storageService?.audioQuality ?? 'high') == 'high';
+        unawaited(
+          _youtubeService
+              .resolveAudioUrl(nextItem.id, highQuality: highQuality)
+              .catchError((_) => Uri()),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('Autoplay staging failed: $e');
+    } finally {
+      _isStagingAutoplay = false;
+    }
   }
 
   Future<void> skipToPrevious() async {
@@ -577,29 +638,33 @@ class PlaybackController extends ChangeNotifier {
   }
 
   Future<void> _onTrackCompleted() async {
-    if (_disposed) return;
+    if (_disposed || _isHandlingTrackCompletion) return;
+    _isHandlingTrackCompletion = true;
+    try {
+      // Reset offline progress for completed track
+      if (_selected != null && _storageService != null) {
+        _storageService.clearPlaybackPosition(_selected!.id);
+      }
 
-    // Reset offline progress for completed track
-    if (_selected != null && _storageService != null) {
-      _storageService.clearPlaybackPosition(_selected!.id);
-    }
+      // Check sleep at end of track
+      if (_sleepAtEndOfTrack) {
+        cancelSleepTimer();
+        await _player?.pause();
+        return;
+      }
 
-    // Check sleep at end of track
-    if (_sleepAtEndOfTrack) {
-      cancelSleepTimer();
-      await _player?.pause();
-      return;
-    }
-
-    if (_loopMode == PlaybackLoopMode.one) {
-      await seek(Duration.zero);
-      unawaited(_play(_request));
-      return;
-    }
-    if (_currentIndex + 1 < _queue.length ||
-        (_loopMode == PlaybackLoopMode.all && _queue.isNotEmpty) ||
-        (_storageService != null && _storageService.autoplay)) {
-      await skipToNext();
+      if (_loopMode == PlaybackLoopMode.one) {
+        await seek(Duration.zero);
+        unawaited(_play(_request));
+        return;
+      }
+      if (_currentIndex + 1 < _queue.length ||
+          (_loopMode == PlaybackLoopMode.all && _queue.isNotEmpty) ||
+          (_storageService != null && _storageService.autoplay)) {
+        await skipToNext();
+      }
+    } finally {
+      _isHandlingTrackCompletion = false;
     }
   }
 

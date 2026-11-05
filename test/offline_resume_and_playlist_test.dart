@@ -19,6 +19,11 @@ class StubYoutubeService extends YoutubeService {
   Future<Uri> resolveAudioUrl(String videoId, {bool highQuality = true}) async {
     return Uri.parse('https://example.com/$videoId.m4a');
   }
+
+  @override
+  Future<List<YoutubeSearchItem>> getRelatedVideos(
+    YoutubeSearchItem currentItem,
+  ) async => [];
 }
 
 void main() {
