@@ -41,6 +41,7 @@ class PlaybackBar extends StatelessWidget {
                 ? 'Playing'
                 : 'Paused');
 
+        double dragDistance = 0.0;
         return RepaintBoundary(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
@@ -61,21 +62,43 @@ class PlaybackBar extends StatelessWidget {
                 ],
               ),
               clipBehavior: Clip.antiAlias,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () {
-                    if (storageService != null) {
-                      FullPlayerSheet.show(
-                        context,
-                        playback: controller,
-                        storage: storageService!,
-                        downloadService: downloadService,
-                        onOpenQueue: onOpenQueue,
-                      );
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onHorizontalDragStart: (_) {
+                  dragDistance = 0.0;
+                },
+                onHorizontalDragUpdate: (details) {
+                  dragDistance += details.primaryDelta ?? 0.0;
+                },
+                onHorizontalDragEnd: (details) {
+                  final velocity = details.primaryVelocity ?? 0.0;
+                  if (dragDistance < -35.0 || velocity < -200.0) {
+                    if (controller.hasNext) {
+                      controller.skipToNext();
                     }
-                  },
-                  child: Column(
+                  } else if (dragDistance > 35.0 || velocity > 200.0) {
+                    controller.skipToPrevious();
+                  }
+                  dragDistance = 0.0;
+                },
+                onHorizontalDragCancel: () {
+                  dragDistance = 0.0;
+                },
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      if (storageService != null) {
+                        FullPlayerSheet.show(
+                          context,
+                          playback: controller,
+                          storage: storageService!,
+                          downloadService: downloadService,
+                          onOpenQueue: onOpenQueue,
+                        );
+                      }
+                    },
+                    child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Padding(
@@ -226,6 +249,7 @@ class PlaybackBar extends StatelessWidget {
               ),
             ),
           ),
+        ),
         );
       },
     );

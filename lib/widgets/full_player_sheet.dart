@@ -64,6 +64,8 @@ class FullPlayerSheet extends StatefulWidget {
 class _FullPlayerSheetState extends State<FullPlayerSheet> {
   int _seekFeedback = 0; // -10 or +10
   Timer? _seekFeedbackTimer;
+  double _cardDragOffset = 0.0;
+  bool _isDraggingCard = false;
 
   @override
   void dispose() {
@@ -428,37 +430,90 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                         ),
                       ),
                       GestureDetector(
+                        key: const ValueKey('full_player_track_card'),
                         onDoubleTapDown: (details) =>
                             _onDoubleTapDown(details, artworkWidth),
-                        child: Container(
-                          width: artworkWidth,
-                          height: artworkWidth,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: Colors.white.withAlpha(20),
-                              width: 1,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(160),
-                                blurRadius: 20,
-                                offset: const Offset(0, 8),
+                        onHorizontalDragStart: (_) {
+                          setState(() {
+                            _isDraggingCard = true;
+                            _cardDragOffset = 0.0;
+                          });
+                        },
+                        onHorizontalDragUpdate: (details) {
+                          setState(() {
+                            _cardDragOffset = (_cardDragOffset + (details.primaryDelta ?? 0.0))
+                                .clamp(-120.0, 120.0);
+                          });
+                        },
+                        onHorizontalDragEnd: (details) {
+                          final velocity = details.primaryVelocity ?? 0.0;
+                          final shouldNext = _cardDragOffset < -40.0 || velocity < -250.0;
+                          final shouldPrev = _cardDragOffset > 40.0 || velocity > 250.0;
+
+                          if (shouldNext) {
+                            widget.playback.skipToNext();
+                          } else if (shouldPrev) {
+                            widget.playback.skipToPrevious();
+                          }
+
+                          setState(() {
+                            _isDraggingCard = false;
+                            _cardDragOffset = 0.0;
+                          });
+                        },
+                        onHorizontalDragCancel: () {
+                          if (_isDraggingCard) {
+                            setState(() {
+                              _isDraggingCard = false;
+                              _cardDragOffset = 0.0;
+                            });
+                          }
+                        },
+                        child: AnimatedContainer(
+                          duration: _isDraggingCard
+                              ? Duration.zero
+                              : const Duration(milliseconds: 240),
+                          curve: Curves.easeOutCubic,
+                          transform: Matrix4.translationValues(_cardDragOffset, 0, 0)
+                            ..rotateZ(_cardDragOffset * 0.0006),
+                          child: Container(
+                            width: artworkWidth,
+                            height: artworkWidth,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: Colors.white.withAlpha(20),
+                                width: 1,
                               ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                item.thumbnailUrl.isNotEmpty
-                                    ? Image.network(
-                                        item.thumbnailUrl,
-                                        fit: BoxFit.cover,
-                                        errorBuilder:
-                                            (context, error, stackTrace) =>
-                                                Container(
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withAlpha(160),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  item.thumbnailUrl.isNotEmpty
+                                      ? Image.network(
+                                          item.thumbnailUrl,
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (context, error, stackTrace) =>
+                                                  Container(
+                                            color: theme
+                                                .colorScheme.surfaceContainerHighest,
+                                            child: const Icon(
+                                              Icons.music_note,
+                                              size: 80,
+                                            ),
+                                          ),
+                                        )
+                                      : Container(
                                           color: theme
                                               .colorScheme.surfaceContainerHighest,
                                           child: const Icon(
@@ -466,46 +521,85 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                                             size: 80,
                                           ),
                                         ),
-                                      )
-                                    : Container(
-                                        color: theme
-                                            .colorScheme.surfaceContainerHighest,
-                                        child: const Icon(
-                                          Icons.music_note,
-                                          size: 80,
+
+                                  // Seek Feedback Overlay
+                                  if (_seekFeedback != 0)
+                                    AnimatedContainer(
+                                      duration: const Duration(milliseconds: 200),
+                                      color: Colors.black54,
+                                      child: Center(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              _seekFeedback < 0
+                                                  ? Icons.replay_10
+                                                  : Icons.forward_10,
+                                              size: 56,
+                                              color: Colors.white,
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              _seekFeedback < 0 ? '-10s' : '+10s',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
+                                    ),
 
-                                // Seek Feedback Overlay
-                                if (_seekFeedback != 0)
-                                  AnimatedContainer(
-                                    duration: const Duration(milliseconds: 200),
-                                    color: Colors.black54,
-                                    child: Center(
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            _seekFeedback < 0
-                                                ? Icons.replay_10
-                                                : Icons.forward_10,
-                                            size: 56,
-                                            color: Colors.white,
+                                  // Swipe Feedback Overlay (Next / Previous)
+                                  if (_cardDragOffset.abs() > 20)
+                                    Positioned.fill(
+                                      child: Container(
+                                        color: Colors.black.withAlpha(
+                                          (_cardDragOffset.abs() * 0.85).clamp(0, 150).toInt(),
+                                        ),
+                                        child: Center(
+                                          child: Row(
+                                            mainAxisAlignment: _cardDragOffset < 0
+                                                ? MainAxisAlignment.end
+                                                : MainAxisAlignment.start,
+                                            children: [
+                                              Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 24),
+                                                child: Column(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      _cardDragOffset < 0
+                                                          ? Icons.skip_next
+                                                          : Icons.skip_previous,
+                                                      size: 40,
+                                                      color: Colors.white.withAlpha(
+                                                        (_cardDragOffset.abs() * 3).clamp(80, 255).toInt(),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      _cardDragOffset < 0 ? 'Next' : 'Previous',
+                                                      style: TextStyle(
+                                                        color: Colors.white.withAlpha(
+                                                          (_cardDragOffset.abs() * 3).clamp(80, 255).toInt(),
+                                                        ),
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 14,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            _seekFeedback < 0 ? '-10s' : '+10s',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16,
-                                            ),
-                                          ),
-                                        ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -572,6 +666,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
               children: [
                 // Shuffle
                 IconButton(
+                  iconSize: 22,
                   icon: Icon(
                     Icons.shuffle,
                     color: playback.isShuffle ? theme.colorScheme.primary : null,
@@ -583,7 +678,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                 ),
                 // Previous
                 IconButton(
-                  iconSize: 36,
+                  iconSize: 28,
                   icon: const Icon(Icons.skip_previous),
                   tooltip: 'Previous',
                   onPressed: playback.skipToPrevious,
@@ -591,10 +686,10 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                 // Play / Pause / Replay with Glow
                 if (playback.isLoading)
                   const SizedBox(
-                    width: 64,
-                    height: 64,
+                    width: 52,
+                    height: 52,
                     child: Center(
-                      child: CircularProgressIndicator(strokeWidth: 3),
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
                     ),
                   )
                 else
@@ -603,18 +698,18 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: theme.colorScheme.primary.withAlpha(90),
-                          blurRadius: 18,
-                          spreadRadius: 1,
+                          color: theme.colorScheme.primary.withAlpha(85),
+                          blurRadius: 14,
+                          spreadRadius: 0,
                         ),
                       ],
                     ),
                     child: IconButton.filled(
-                      iconSize: 38,
+                      iconSize: 30,
                       style: IconButton.styleFrom(
                         backgroundColor: theme.colorScheme.primary,
                         foregroundColor: Colors.black,
-                        padding: const EdgeInsets.all(14),
+                        padding: const EdgeInsets.all(11),
                       ),
                       tooltip: playback.error != null
                           ? 'Retry'
@@ -637,13 +732,14 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                   ),
                 // Next
                 IconButton(
-                  iconSize: 36,
+                  iconSize: 28,
                   icon: const Icon(Icons.skip_next),
                   tooltip: 'Next',
                   onPressed: playback.skipToNext,
                 ),
                 // Repeat
                 IconButton(
+                  iconSize: 22,
                   icon: Icon(
                     playback.loopMode == PlaybackLoopMode.one
                         ? Icons.repeat_one
