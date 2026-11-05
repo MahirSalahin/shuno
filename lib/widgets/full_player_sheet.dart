@@ -353,17 +353,57 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final screenHeight = constraints.maxHeight;
-                  final maxArtworkHeight = (screenHeight > 0 ? screenHeight * 0.35 : 260.0)
-                      .clamp(180.0, 300.0);
-                  final artworkWidth = (constraints.maxWidth - 48).clamp(0.0, maxArtworkHeight);
-                  final gap = ((screenHeight - 264 - artworkWidth) / 3).clamp(8.0, 48.0);
+                  final screenWidth = constraints.maxWidth;
+
+                  // Fixed element heights (Spotify-matched spacing)
+                  const topPadding = 6.0;
+                  const topBarHeight = 44.0;
+                  const titleRowHeight = 48.0;
+                  const titleToScrubber = 12.0;
+                  const scrubberHeight = 44.0;
+                  const scrubberToControls = 14.0;
+                  const controlsHeight = 64.0;
+                  const bottomToolbarHeight = 44.0;
+                  const bottomPadding = 10.0;
+
+                  const totalFixedUi = topPadding +
+                      topBarHeight +
+                      titleRowHeight +
+                      titleToScrubber +
+                      scrubberHeight +
+                      scrubberToControls +
+                      controlsHeight +
+                      bottomToolbarHeight +
+                      bottomPadding;
+
+                  final availableSpace =
+                      (screenHeight - totalFixedUi).clamp(0.0, double.infinity);
+
+                  // Spacing between Layer 1 (Player controls) and Layer 2 (Bottom toolbar)
+                  final bottomGap = (availableSpace * 0.12).clamp(18.0, 56.0);
+                  final remainingForArtAndMargins =
+                      (availableSpace - bottomGap).clamp(0.0, double.infinity);
+
+                  // Artwork sizing: large, responsive and immersive like Spotify
+                  final maxArtwork =
+                      (remainingForArtAndMargins * 0.70).clamp(160.0, 360.0);
+                  final artworkWidth = (screenWidth - 48).clamp(0.0, maxArtwork);
+
+                  // Remaining margins distributed between above and below the artwork card
+                  final remainingMargins =
+                      (remainingForArtAndMargins - artworkWidth).clamp(0.0, double.infinity);
+                  final topGap = (remainingMargins * 0.38).clamp(12.0, 60.0);
+                  final midGap = (remainingMargins - topGap).clamp(12.0, double.infinity);
 
                   return SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Top Bar: Minimize arrow, Center "NOW PLAYING" & channel name, Right Playlist Add
+                        const SizedBox(height: topPadding),
+
+                        // Top Bar: Minimize arrow, Center "NOW PLAYING" & channel name, Right Sleep & Playlist Add
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -401,21 +441,50 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                                 ],
                               ),
                             ),
-                            IconButton(
-                              iconSize: 24,
-                              visualDensity: VisualDensity.compact,
-                              icon: const Icon(Icons.playlist_add),
-                              tooltip: 'Add to playlist',
-                              onPressed: () => AddToPlaylistDialog.show(
-                                context,
-                                item: item,
-                                storageService: storage,
-                              ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Sleep Timer Icon
+                                IconButton(
+                                  iconSize: 22,
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+                                  icon: Icon(
+                                    playback.hasSleepTimer
+                                        ? Icons.bedtime
+                                        : Icons.bedtime_outlined,
+                                    size: 22,
+                                    color: playback.hasSleepTimer
+                                        ? theme.colorScheme.primary
+                                        : theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                  tooltip: playback.hasSleepTimer
+                                      ? 'Sleep timer: ${playback.sleepTimerRemainingFormatted}'
+                                      : 'Set sleep timer',
+                                  onPressed: () => _showSleepTimerPicker(context),
+                                ),
+                                const SizedBox(width: 4),
+                                // Add to Playlist Icon
+                                IconButton(
+                                  iconSize: 24,
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+                                  icon: const Icon(Icons.playlist_add),
+                                  tooltip: 'Add to playlist',
+                                  onPressed: () => AddToPlaylistDialog.show(
+                                    context,
+                                    item: item,
+                                    storageService: storage,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
 
-                        SizedBox(height: gap),
+                        SizedBox(height: topGap),
 
                         // Center Artwork with Double-Tap to Seek (+/- 10s) and Ambient Natural Shadow
                         Center(
@@ -596,9 +665,9 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                       ),
                     ),
 
-                    SizedBox(height: gap),
+                    SizedBox(height: midGap),
 
-            // Title, Channel & Favorite
+            // Title, Channel, Download & Favorite
             Row(
               children: [
                 Expanded(
@@ -625,8 +694,88 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                     ],
                   ),
                 ),
+                const SizedBox(width: 8),
+                // Download Button (Track-level action)
+                if (isDownloading)
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                    icon: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        value: downloadService?.getProgress(item.id),
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    tooltip:
+                        'Downloading ${((downloadService?.getProgress(item.id) ?? 0) * 100).toInt()}% (tap to cancel)',
+                    onPressed: () {
+                      downloadService?.cancelDownload(item.id);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Download cancelled')),
+                      );
+                    },
+                  )
+                else if (isDownloaded)
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                    icon: Icon(
+                      Icons.download_done,
+                      size: 24,
+                      color: theme.colorScheme.primary,
+                    ),
+                    tooltip: 'Downloaded (offline ready)',
+                    onPressed: () async {
+                      final confirm = await showConfirmDialog(
+                        context,
+                        title: 'Delete Download?',
+                        message:
+                            'Remove downloaded audio for "${item.title}" from your device?',
+                        confirmLabel: 'Delete',
+                      );
+                      if (confirm && context.mounted) {
+                        downloadService?.deleteDownload(item.id);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Download deleted')),
+                        );
+                      }
+                    },
+                  )
+                else
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                    icon: Icon(
+                      Icons.arrow_circle_down_outlined,
+                      size: 24,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    tooltip: 'Download',
+                    onPressed: () {
+                      if (downloadService != null) {
+                        downloadService.downloadTrack(item);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Downloading "${item.title}"...'),
+                            duration: const Duration(seconds: 3),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                const SizedBox(width: 2),
+                // Favorite Button (Track-level action)
                 IconButton(
-                  iconSize: 28,
+                  iconSize: 26,
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(width: 40, height: 40),
                   icon: Icon(
                     isFav ? Icons.favorite : Icons.favorite_border,
                     color: isFav ? Colors.redAccent : null,
@@ -670,11 +819,14 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                 ),
                 // Play / Pause / Replay with Glow
                 if (playback.isLoading)
-                  const SizedBox(
-                    width: 52,
-                    height: 52,
+                  SizedBox(
+                    width: 60,
+                    height: 60,
                     child: Center(
-                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.8,
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
                   )
                 else
@@ -683,18 +835,18 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: theme.colorScheme.primary.withAlpha(85),
-                          blurRadius: 14,
-                          spreadRadius: 0,
+                          color: theme.colorScheme.primary.withAlpha(90),
+                          blurRadius: 16,
+                          spreadRadius: 1,
                         ),
                       ],
                     ),
                     child: IconButton.filled(
-                      iconSize: 30,
+                      iconSize: 34,
                       style: IconButton.styleFrom(
                         backgroundColor: theme.colorScheme.primary,
                         foregroundColor: Colors.black,
-                        padding: const EdgeInsets.all(11),
+                        padding: const EdgeInsets.all(13),
                       ),
                       tooltip: playback.error != null
                           ? 'Retry'
@@ -744,168 +896,79 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                 ),
               ],
             ),
-            SizedBox(height: gap),
 
-            // Bottom Icon Toolbar: Speed badge, Sleep timer, PDF Reader, Download, Queue
+            // Bottom Icon Toolbar (Layer 2): Audio tools group (Speed, Book) on left, Queue on right
             Padding(
-              padding: const EdgeInsets.only(top: 8, bottom: 4),
+              padding: EdgeInsets.only(top: bottomGap, bottom: bottomPadding),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // 1. Playback Speed Button Badge
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
-                    icon: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: playback.playbackSpeed != 1.0
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.outlineVariant.withAlpha(140),
-                          width: 1.2,
+                  // Left group: Playback Speed badge + Book / PDF reader
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Playback Speed Button Badge
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
+                        icon: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: playback.playbackSpeed != 1.0
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.outlineVariant.withAlpha(140),
+                              width: 1.2,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            color: playback.playbackSpeed != 1.0
+                                ? theme.colorScheme.primary.withAlpha(35)
+                                : Colors.transparent,
+                          ),
+                          child: Text(
+                            playback.playbackSpeed == 1.0
+                                ? '1x'
+                                : '${playback.playbackSpeed % 1 == 0 ? playback.playbackSpeed.toInt() : playback.playbackSpeed}x',
+                            maxLines: 1,
+                            softWrap: false,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.2,
+                              color: playback.playbackSpeed != 1.0
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
                         ),
-                        borderRadius: BorderRadius.circular(12),
-                        color: playback.playbackSpeed != 1.0
-                            ? theme.colorScheme.primary.withAlpha(35)
-                            : Colors.transparent,
+                        tooltip: 'Playback speed: ${playback.playbackSpeed}x',
+                        onPressed: () => showSpeedPickerSheet(context, playback),
                       ),
-                      child: Text(
-                        playback.playbackSpeed == 1.0
-                            ? '1x'
-                            : '${playback.playbackSpeed % 1 == 0 ? playback.playbackSpeed.toInt() : playback.playbackSpeed}x',
-                        maxLines: 1,
-                        softWrap: false,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.2,
-                          color: playback.playbackSpeed != 1.0
+                      const SizedBox(width: 8),
+                      // Read Along / Book (PDF) Icon
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(width: 42, height: 42),
+                        icon: Icon(
+                          hasAttachedPdf
+                              ? Icons.auto_stories
+                              : Icons.auto_stories_outlined,
+                          size: 23,
+                          color: hasAttachedPdf
                               ? theme.colorScheme.primary
                               : theme.colorScheme.onSurfaceVariant,
                         ),
+                        tooltip: hasAttachedPdf
+                            ? 'Read along (PDF attached)'
+                            : 'Attach book (PDF)',
+                        onPressed: () => _openAudiobookReader(context),
                       ),
-                    ),
-                    tooltip: 'Playback speed: ${playback.playbackSpeed}x',
-                    onPressed: () => showSpeedPickerSheet(context, playback),
+                    ],
                   ),
 
-                  // 2. Sleep Timer Icon
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(width: 42, height: 42),
-                    icon: Icon(
-                      playback.hasSleepTimer
-                          ? Icons.bedtime
-                          : Icons.bedtime_outlined,
-                      size: 23,
-                      color: playback.hasSleepTimer
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurfaceVariant,
-                    ),
-                    tooltip: playback.hasSleepTimer
-                        ? 'Sleep timer: ${playback.sleepTimerRemainingFormatted}'
-                        : 'Set sleep timer',
-                    onPressed: () => _showSleepTimerPicker(context),
-                  ),
-
-                  // 3. Read Along / Book (PDF) Icon
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(width: 42, height: 42),
-                    icon: Icon(
-                      hasAttachedPdf
-                          ? Icons.auto_stories
-                          : Icons.auto_stories_outlined,
-                      size: 23,
-                      color: hasAttachedPdf
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurfaceVariant,
-                    ),
-                    tooltip: hasAttachedPdf
-                        ? 'Read along (PDF attached)'
-                        : 'Attach book (PDF)',
-                    onPressed: () => _openAudiobookReader(context),
-                  ),
-
-                  // 4. Download Icon (Clean, Icon-only without text)
-                  if (isDownloading)
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(width: 42, height: 42),
-                      icon: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.2,
-                          value: downloadService?.getProgress(item.id),
-                          color: theme.colorScheme.primary,
-                        ),
-                      ),
-                      tooltip: 'Downloading ${((downloadService?.getProgress(item.id) ?? 0) * 100).toInt()}% (tap to cancel)',
-                      onPressed: () {
-                        downloadService?.cancelDownload(item.id);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Download cancelled')),
-                        );
-                      },
-                    )
-                  else if (isDownloaded)
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(width: 42, height: 42),
-                      icon: Icon(
-                        Icons.download_done,
-                        size: 24,
-                        color: theme.colorScheme.primary,
-                      ),
-                      tooltip: 'Downloaded (offline ready)',
-                      onPressed: () async {
-                        final confirm = await showConfirmDialog(
-                          context,
-                          title: 'Delete Download?',
-                          message:
-                              'Remove downloaded audio for "${item.title}" from your device?',
-                          confirmLabel: 'Delete',
-                        );
-                        if (confirm && context.mounted) {
-                          downloadService?.deleteDownload(item.id);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Download deleted')),
-                          );
-                        }
-                      },
-                    )
-                  else
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(width: 42, height: 42),
-                      icon: Icon(
-                        Icons.arrow_circle_down_outlined,
-                        size: 24,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                      tooltip: 'Download',
-                      onPressed: () {
-                        if (downloadService != null) {
-                          downloadService.downloadTrack(item);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Downloading "${item.title}"...'),
-                              duration: const Duration(seconds: 3),
-                            ),
-                          );
-                        }
-                      },
-                    ),
-
-                  // 5. Queue Icon (Clean, Icon-only with badge)
+                  // Right group: Queue Icon (Clean, with badge)
                   IconButton(
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
