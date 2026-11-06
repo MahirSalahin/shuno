@@ -272,7 +272,14 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
 
     final theme = Theme.of(context);
     final surfaceColor = theme.colorScheme.surface;
-    final hasThumbnail = item.thumbnailUrl.isNotEmpty;
+    final rawThumb = item.thumbnailUrl;
+    final effectiveThumbnailUrl = rawThumb.contains('mqdefault.jpg')
+        ? rawThumb.replaceAll('mqdefault.jpg', 'hqdefault.jpg')
+        : rawThumb;
+    final hasThumbnail = effectiveThumbnailUrl.isNotEmpty;
+    final isYouTubeThumb = effectiveThumbnailUrl.contains('ytimg.com') ||
+        effectiveThumbnailUrl.contains('youtube.com') ||
+        effectiveThumbnailUrl.contains('googlevideo.com');
     final isFav = storage.isFavorite(item.id);
     final isDownloaded = storage.isDownloaded(item.id);
     final isDownloading = downloadService?.isDownloading(item.id) ?? false;
@@ -297,7 +304,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                   child: Transform.scale(
                     scale: 1.4,
                     child: Image.network(
-                      item.thumbnailUrl,
+                      effectiveThumbnailUrl,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) =>
                           const SizedBox.shrink(),
@@ -379,21 +386,23 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                   final availableSpace =
                       (screenHeight - totalFixedUi).clamp(0.0, double.infinity);
 
-                  // Spacing between Layer 1 (Player controls) and Layer 2 (Bottom toolbar)
-                  final bottomGap = (availableSpace * 0.12).clamp(18.0, 56.0);
-                  final remainingForArtAndMargins =
-                      (availableSpace - bottomGap).clamp(0.0, double.infinity);
+                  // 16:9 Video Artwork sizing (preserves original video aspect ratio, prevents chopping titles & faces)
+                  final targetWidth = (screenWidth - 40).clamp(240.0, 420.0);
+                  final targetHeight = targetWidth * (9 / 16);
+                  final maxArtHeight = (availableSpace * 0.55).clamp(140.0, 320.0);
 
-                  // Artwork sizing: large, responsive and immersive like Spotify
-                  final maxArtwork =
-                      (remainingForArtAndMargins * 0.70).clamp(160.0, 360.0);
-                  final artworkWidth = (screenWidth - 48).clamp(0.0, maxArtwork);
+                  final artworkHeight =
+                      targetHeight > maxArtHeight ? maxArtHeight : targetHeight;
+                  final artworkWidth = targetHeight > maxArtHeight
+                      ? artworkHeight * (16 / 9)
+                      : targetWidth;
 
-                  // Remaining margins distributed between above and below the artwork card
+                  // Remaining margins distributed between top gap, mid gap, and bottom gap
                   final remainingMargins =
-                      (remainingForArtAndMargins - artworkWidth).clamp(0.0, double.infinity);
-                  final topGap = (remainingMargins * 0.38).clamp(12.0, 60.0);
-                  final midGap = (remainingMargins - topGap).clamp(12.0, double.infinity);
+                      (availableSpace - artworkHeight).clamp(0.0, double.infinity);
+                  final topGap = (remainingMargins * 0.30).clamp(16.0, 90.0);
+                  final bottomGap = (remainingMargins * 0.28).clamp(20.0, 72.0);
+                  final midGap = (remainingMargins - topGap - bottomGap).clamp(16.0, double.infinity);
 
                   return SingleChildScrollView(
                     physics: const BouncingScrollPhysics(),
@@ -540,9 +549,9 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                             ..rotateZ(_cardDragOffset * 0.0006),
                           child: Container(
                             width: artworkWidth,
-                            height: artworkWidth,
+                            height: artworkHeight,
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(12),
                               border: Border.all(
                                 color: Colors.white.withAlpha(20),
                                 width: 1,
@@ -556,14 +565,17 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                               ],
                             ),
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(12),
                               child: Stack(
                                 fit: StackFit.expand,
                                 children: [
-                                  item.thumbnailUrl.isNotEmpty
+                                  effectiveThumbnailUrl.isNotEmpty
                                       ? Image.network(
-                                          item.thumbnailUrl,
-                                          fit: BoxFit.cover,
+                                          effectiveThumbnailUrl,
+                                          fit: isYouTubeThumb
+                                              ? BoxFit.cover
+                                              : BoxFit.contain,
+                                          cacheWidth: (artworkWidth * 2).toInt(),
                                           errorBuilder:
                                               (context, error, stackTrace) =>
                                                   Container(

@@ -210,7 +210,7 @@ class YoutubeService {
             id: video.id.value,
             title: video.title,
             channelName: video.author,
-            thumbnailUrl: ThumbnailSet(video.id.value).mediumResUrl,
+            thumbnailUrl: ThumbnailSet(video.id.value).highResUrl,
             duration: _parseDuration(video.duration),
           ),
         )
@@ -368,7 +368,7 @@ class YoutubeService {
                     title: v.title,
                     channelName:
                         v.author.isNotEmpty ? v.author : (channelName ?? ''),
-                    thumbnailUrl: v.thumbnails.mediumResUrl,
+                    thumbnailUrl: v.thumbnails.highResUrl,
                     duration: (v.duration != null && v.duration! > Duration.zero)
                         ? v.duration
                         : null,
@@ -399,7 +399,7 @@ class YoutubeService {
               id: v.id.value,
               title: v.title,
               channelName: v.author.isNotEmpty ? v.author : (channelName ?? ''),
-              thumbnailUrl: v.thumbnails.mediumResUrl,
+              thumbnailUrl: v.thumbnails.highResUrl,
               duration: (v.duration != null && v.duration! > Duration.zero)
                   ? v.duration
                   : null,
@@ -426,7 +426,7 @@ class YoutubeService {
                 ? v.title
                 : (channelName != null ? '$channelName Track' : 'Track'),
             channelName: v.author.isNotEmpty ? v.author : (channelName ?? ''),
-            thumbnailUrl: v.thumbnails.mediumResUrl,
+            thumbnailUrl: v.thumbnails.highResUrl,
             duration: (v.duration != null && v.duration! > Duration.zero)
                 ? v.duration
                 : null,
@@ -729,7 +729,7 @@ class YoutubeService {
             id: video.id.value,
             title: video.title.isNotEmpty ? video.title : 'Track',
             channelName: video.author,
-            thumbnailUrl: ThumbnailSet(video.id.value).mediumResUrl,
+            thumbnailUrl: ThumbnailSet(video.id.value).highResUrl,
             duration: (video.duration != null && video.duration! > Duration.zero)
                 ? video.duration
                 : null,
@@ -977,7 +977,7 @@ class YoutubeService {
           }
         }
 
-        var thumb = ThumbnailSet(contentId).mediumResUrl;
+        var thumb = ThumbnailSet(contentId).highResUrl;
         final sources = lvm['contentImage']?['thumbnailViewModel']?['image']?['sources'];
         if (sources is List && sources.isNotEmpty) {
           thumb = sources.last?['url']?.toString() ?? thumb;
@@ -1017,7 +1017,7 @@ class YoutubeService {
         final durationText = vr['lengthText']?['simpleText']?.toString() ?? '';
         final duration = _parseDuration(durationText);
 
-        var thumb = ThumbnailSet(videoId).mediumResUrl;
+        var thumb = ThumbnailSet(videoId).highResUrl;
         final thumbs = vr['thumbnail']?['thumbnails'];
         if (thumbs is List && thumbs.isNotEmpty) {
           thumb = thumbs.last['url']?.toString() ?? thumb;
@@ -1072,7 +1072,7 @@ class YoutubeService {
           }
         }
 
-        var thumb = ThumbnailSet(videoId).mediumResUrl;
+        var thumb = ThumbnailSet(videoId).highResUrl;
         final thumbs = gvr['thumbnail']?['thumbnails'];
         if (thumbs is List && thumbs.isNotEmpty) {
           thumb = thumbs.last?['url']?.toString() ?? thumb;
@@ -1111,7 +1111,7 @@ class YoutubeService {
         final durationText = pvr['lengthText']?['simpleText']?.toString() ?? '';
         final duration = _parseDuration(durationText);
 
-        var thumb = ThumbnailSet(videoId).mediumResUrl;
+        var thumb = ThumbnailSet(videoId).highResUrl;
         final thumbs = pvr['thumbnail']?['thumbnails'];
         if (thumbs is List && thumbs.isNotEmpty) {
           thumb = thumbs.last['url']?.toString() ?? thumb;
@@ -1218,7 +1218,7 @@ class YoutubeService {
                 id: v.id.value,
                 title: v.title,
                 channelName: v.author,
-                thumbnailUrl: ThumbnailSet(v.id.value).mediumResUrl,
+                thumbnailUrl: ThumbnailSet(v.id.value).highResUrl,
                 duration: _parseDuration(v.duration),
               ),
             );
@@ -1239,7 +1239,7 @@ class YoutubeService {
                 id: v.id.value,
                 title: v.title,
                 channelName: v.author,
-                thumbnailUrl: ThumbnailSet(v.id.value).mediumResUrl,
+                thumbnailUrl: ThumbnailSet(v.id.value).highResUrl,
                 duration: v.duration,
               ),
             );
@@ -1262,7 +1262,7 @@ class YoutubeService {
                 id: v.id.value,
                 title: v.title,
                 channelName: v.author,
-                thumbnailUrl: ThumbnailSet(v.id.value).mediumResUrl,
+                thumbnailUrl: ThumbnailSet(v.id.value).highResUrl,
                 duration: _parseDuration(v.duration),
               ),
             );
