@@ -410,7 +410,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                             IconButton(
                               iconSize: 28,
                               visualDensity: VisualDensity.compact,
-                              icon: const Icon(Icons.keyboard_arrow_down),
+                              icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white),
                               tooltip: 'Minimize',
                               onPressed: () => Navigator.of(context).pop(),
                             ),
@@ -471,7 +471,10 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                                   visualDensity: VisualDensity.compact,
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints.tightFor(width: 36, height: 36),
-                                  icon: const Icon(Icons.playlist_add),
+                                  icon: Icon(
+                                    Icons.playlist_add,
+                                    color: Colors.white.withAlpha(200),
+                                  ),
                                   tooltip: 'Add to playlist',
                                   onPressed: () => AddToPlaylistDialog.show(
                                     context,
@@ -754,7 +757,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                     icon: Icon(
                       Icons.arrow_circle_down_outlined,
                       size: 24,
-                      color: theme.colorScheme.onSurfaceVariant,
+                      color: Colors.white.withAlpha(200),
                     ),
                     tooltip: 'Download',
                     onPressed: () {
@@ -778,7 +781,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                   constraints: const BoxConstraints.tightFor(width: 40, height: 40),
                   icon: Icon(
                     isFav ? Icons.favorite : Icons.favorite_border,
-                    color: isFav ? Colors.redAccent : null,
+                    color: isFav ? Colors.redAccent : Colors.white.withAlpha(200),
                   ),
                   tooltip: isFav ? 'Remove from favorites' : 'Add to favorites',
                   onPressed: () => storage.toggleFavorite(item),
@@ -803,7 +806,9 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                   iconSize: 26,
                   icon: Icon(
                     Icons.shuffle,
-                    color: playback.isShuffle ? theme.colorScheme.primary : null,
+                    color: playback.isShuffle
+                        ? theme.colorScheme.primary
+                        : Colors.white.withAlpha(180),
                   ),
                   tooltip: playback.isShuffle
                       ? 'Shuffle is on'
@@ -813,19 +818,19 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                 // Previous
                 IconButton(
                   iconSize: 34,
-                  icon: const Icon(Icons.skip_previous),
+                  icon: const Icon(Icons.skip_previous, color: Colors.white),
                   tooltip: 'Previous',
                   onPressed: playback.skipToPrevious,
                 ),
-                // Play / Pause / Replay with Glow
+                // Play / Pause / Replay with Clean Contrast Shadow
                 if (playback.isLoading)
-                  SizedBox(
+                  const SizedBox(
                     width: 68,
                     height: 68,
                     child: Center(
                       child: CircularProgressIndicator(
                         strokeWidth: 3.2,
-                        color: theme.colorScheme.primary,
+                        color: Colors.white,
                       ),
                     ),
                   )
@@ -835,16 +840,16 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: theme.colorScheme.primary.withAlpha(95),
-                          blurRadius: 18,
-                          spreadRadius: 2,
+                          color: Colors.black.withAlpha(80),
+                          blurRadius: 14,
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
                     child: IconButton.filled(
                       iconSize: 38,
                       style: IconButton.styleFrom(
-                        backgroundColor: theme.colorScheme.primary,
+                        backgroundColor: Colors.white,
                         foregroundColor: Colors.black,
                         padding: const EdgeInsets.all(15),
                       ),
@@ -870,7 +875,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                 // Next
                 IconButton(
                   iconSize: 34,
-                  icon: const Icon(Icons.skip_next),
+                  icon: const Icon(Icons.skip_next, color: Colors.white),
                   tooltip: 'Next',
                   onPressed: playback.skipToNext,
                 ),
@@ -885,7 +890,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                         : Icons.repeat,
                     color: playback.loopMode != PlaybackLoopMode.off
                         ? theme.colorScheme.primary
-                        : null,
+                        : Colors.white.withAlpha(180),
                   ),
                   tooltip: playback.loopMode == PlaybackLoopMode.one
                       ? 'Repeat One'
@@ -918,7 +923,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                             border: Border.all(
                               color: playback.playbackSpeed != 1.0
                                   ? theme.colorScheme.primary
-                                  : theme.colorScheme.outlineVariant.withAlpha(140),
+                                  : Colors.white.withAlpha(100),
                               width: 1.2,
                             ),
                             borderRadius: BorderRadius.circular(12),
@@ -938,7 +943,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                               letterSpacing: -0.2,
                               color: playback.playbackSpeed != 1.0
                                   ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurfaceVariant,
+                                  : Colors.white.withAlpha(200),
                             ),
                           ),
                         ),
@@ -958,7 +963,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                           size: 23,
                           color: hasAttachedPdf
                               ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurfaceVariant,
+                              : Colors.white.withAlpha(200),
                         ),
                         tooltip: hasAttachedPdf
                             ? 'Read along (PDF attached)'
@@ -976,9 +981,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                     icon: Icon(
                       Icons.playlist_play,
                       size: 28,
-                      color: playback.upNext.isNotEmpty
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurfaceVariant,
+                      color: Colors.white.withAlpha(200),
                     ),
                     tooltip: 'Queue',
                     onPressed: () {
@@ -1125,8 +1128,9 @@ class _PlayerScrubberState extends State<_PlayerScrubber> {
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
                 trackHeight: 3.5,
                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                activeTrackColor: theme.colorScheme.primary,
-                thumbColor: theme.colorScheme.primary,
+                activeTrackColor: Colors.white,
+                thumbColor: Colors.white,
+                inactiveTrackColor: Colors.white.withAlpha(45),
               ),
               child: Slider(
                 value: currentSeconds,

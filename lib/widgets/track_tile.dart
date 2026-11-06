@@ -55,14 +55,14 @@ class TrackTile extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2.5),
       decoration: BoxDecoration(
         color: isSelected
-            ? theme.colorScheme.primary.withAlpha(26)
+            ? theme.colorScheme.surfaceContainer
             : theme.colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isSelected
-              ? theme.colorScheme.primary.withAlpha(160)
+              ? Colors.white.withAlpha(25)
               : theme.colorScheme.outlineVariant.withAlpha(60),
-          width: isSelected ? 1.2 : 0.8,
+          width: 0.8,
         ),
       ),
       clipBehavior: Clip.antiAlias,
@@ -80,23 +80,6 @@ class TrackTile extends StatelessWidget {
                     leadingWidget!,
                     const SizedBox(width: 8),
                   ],
-                  // Active left accent indicator bar if playing
-                  if (isSelected)
-                    Container(
-                      width: 3,
-                      height: 40,
-                      margin: const EdgeInsets.only(right: 8),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary,
-                        borderRadius: BorderRadius.circular(2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: theme.colorScheme.primary.withAlpha(140),
-                            blurRadius: 4,
-                          ),
-                        ],
-                      ),
-                    ),
                   // Square Artwork + Equalizer (Spotify aesthetic)
                   Stack(
                     alignment: Alignment.center,
@@ -266,7 +249,7 @@ class TrackTile extends StatelessWidget {
                     icon: Icon(
                       isFav ? Icons.favorite : Icons.favorite_border,
                       size: 18,
-                      color: isFav ? Colors.redAccent : null,
+                      color: isFav ? Colors.redAccent : Colors.white.withAlpha(180),
                     ),
                     tooltip: isFav ? 'Remove from favorites' : 'Add to favorites',
                     onPressed: () => storage.toggleFavorite(item),
@@ -279,7 +262,11 @@ class TrackTile extends StatelessWidget {
                       visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
                       constraints: const BoxConstraints.tightFor(width: 28, height: 34),
                       padding: EdgeInsets.zero,
-                      icon: const Icon(Icons.download_outlined, size: 18),
+                      icon: Icon(
+                        Icons.download_outlined,
+                        size: 18,
+                        color: Colors.white.withAlpha(180),
+                      ),
                       tooltip: 'Download for offline',
                       onPressed: () {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -299,7 +286,7 @@ class TrackTile extends StatelessWidget {
                       visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
                       constraints: const BoxConstraints.tightFor(width: 28, height: 34),
                       padding: EdgeInsets.zero,
-                      icon: Icon(trailingAction, size: 18),
+                      icon: Icon(trailingAction, size: 18, color: Colors.white.withAlpha(180)),
                       tooltip: trailingActionTooltip,
                       onPressed: onTrailingAction,
                     ),
@@ -316,7 +303,7 @@ class TrackTile extends StatelessWidget {
                           child: Icon(
                             Icons.more_vert,
                             size: 18,
-                            color: theme.colorScheme.onSurfaceVariant,
+                            color: Colors.white.withAlpha(180),
                           ),
                         ),
                       ),

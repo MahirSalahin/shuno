@@ -258,57 +258,51 @@ class _PlaybackBarState extends State<PlaybackBar> {
                             ),
                             const SizedBox(width: 6),
 
-                            // Play/Pause circular accent button
+                            // Play/Pause button
                             if (controller.isLoading)
                               const Padding(
-                                padding: EdgeInsets.all(10),
+                                padding: EdgeInsets.all(8),
                                 child: SizedBox(
                                   width: 22,
                                   height: 22,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
                                     semanticsLabel: 'Loading audio',
+                                    color: Colors.white,
                                   ),
                                 ),
                               )
                             else
-                              Container(
-                                width: 38,
-                                height: 38,
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.primary.withAlpha(35),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: IconButton(
-                                  iconSize: 22,
-                                  padding: EdgeInsets.zero,
-                                  tooltip: controller.error != null
-                                      ? 'Retry playback'
+                              IconButton(
+                                iconSize: 26,
+                                padding: const EdgeInsets.all(6),
+                                constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
+                                tooltip: controller.error != null
+                                    ? 'Retry playback'
+                                    : controller.isCompleted
+                                    ? 'Replay'
+                                    : controller.isPlaying
+                                    ? 'Pause'
+                                    : 'Play',
+                                onPressed: controller.togglePlayback,
+                                icon: Icon(
+                                  controller.error != null
+                                      ? Icons.refresh
                                       : controller.isCompleted
-                                      ? 'Replay'
+                                      ? Icons.replay
                                       : controller.isPlaying
-                                      ? 'Pause'
-                                      : 'Play',
-                                  onPressed: controller.togglePlayback,
-                                  icon: Icon(
-                                    controller.error != null
-                                        ? Icons.refresh
-                                        : controller.isCompleted
-                                        ? Icons.replay
-                                        : controller.isPlaying
-                                        ? Icons.pause
-                                        : Icons.play_arrow,
-                                    color: theme.colorScheme.primary,
-                                  ),
+                                      ? Icons.pause
+                                      : Icons.play_arrow,
+                                  color: Colors.white,
                                 ),
                               ),
 
                             // Skip Next button
                             IconButton(
-                              iconSize: 22,
-                              padding: const EdgeInsets.all(8),
+                              iconSize: 24,
+                              padding: const EdgeInsets.all(6),
                               constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                              icon: const Icon(Icons.skip_next),
+                              icon: const Icon(Icons.skip_next, color: Colors.white),
                               tooltip: 'Next',
                               onPressed: controller.hasNext ? controller.skipToNext : null,
                             ),
@@ -338,7 +332,6 @@ class _PlaybackProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return ValueListenableBuilder<Duration>(
       valueListenable: controller.positionNotifier,
       builder: (context, position, _) {
@@ -354,10 +347,8 @@ class _PlaybackProgressBar extends StatelessWidget {
           child: LinearProgressIndicator(
             value: controller.isLoading ? null : progress,
             minHeight: 2.5,
-            backgroundColor: theme.colorScheme.outlineVariant.withAlpha(60),
-            valueColor: AlwaysStoppedAnimation<Color>(
-              theme.colorScheme.primary,
-            ),
+            backgroundColor: Colors.white.withAlpha(25),
+            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
           ),
         );
       },

@@ -160,6 +160,11 @@ class AppTheme {
       colorScheme: colorScheme,
       textTheme: textTheme,
 
+      // Global Icon Theme
+      iconTheme: const IconThemeData(
+        color: Color(0xFFFFFFFF),
+      ),
+
       // App Bar Theme
       appBarTheme: AppBarTheme(
         backgroundColor: palette.background,
@@ -258,10 +263,10 @@ class AppTheme {
 
       // Slider Theme (Spotify scrub bar)
       sliderTheme: SliderThemeData(
-        activeTrackColor: palette.primary,
+        activeTrackColor: Colors.white,
         inactiveTrackColor: const Color(0xFF4D4D4D),
         thumbColor: Colors.white,
-        overlayColor: palette.primary.withAlpha(30),
+        overlayColor: Colors.white.withAlpha(30),
         trackHeight: 2.5,
         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
         overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
