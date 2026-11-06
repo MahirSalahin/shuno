@@ -241,6 +241,7 @@ class AppTheme {
         filled: true,
         fillColor: palette.surfaceContainer,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        prefixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 38),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide.none,
