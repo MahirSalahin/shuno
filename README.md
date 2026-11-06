@@ -17,11 +17,13 @@ A modern, **100% ad-free**, local-first audio player built with Flutter, designe
 - Zero advertisements, zero interruptions, and zero commercial banners.
 - No accounts, logins, subscriptions, or tracking. Your listening habits stay private on your device.
 
-### 🎧 Audio & Podcast Playback
+### 🎧 Audio & Spoken-Word Playback
+- **Gesture-Driven Track Navigation**: Swipe left or right on either the mini-player or the full player card to skip tracks, accompanied by interactive real-time title translations.
+- **Dynamic Title Marquee**: Long titles smoothly scroll with marquee animations across both the playback bar and full-screen player sheet.
 - **Fine-Grained Speed Control**: Adjust playback speed from `0.75x` up to `2.5x` with pitch preservation.
 - **Quick Scrubbing**: Double-tap the player or reader to skip 10 seconds backward or forward with visual feedback.
 - **Custom Sleep Timer**: Set a countdown timer (`15m`, `30m`, `45m`, `60m`) or stop playback automatically at the **End of Track**.
-- **Background & Screen-Off Playback**: Native foreground audio service with persistent system notification and lock-screen controls.
+- **Background & Screen-Off Playback**: Native foreground audio service (`audio_service`) with persistent system notifications and lock-screen controls.
 
 ### 💾 Offline Listening & Local-First Storage
 - **Download for Offline Listening**: Save audio tracks directly to device storage for 100% offline access when traveling.
@@ -29,10 +31,11 @@ A modern, **100% ad-free**, local-first audio player built with Flutter, designe
 - **Local JSON Persistence**: Lightweight, battery-efficient local storage without heavy databases or external services.
 
 ### 🗂️ Library & Queue Management
-- **Custom Playlists**: Group audiobook chapters or podcast series into custom playlists.
-- **Active Queue**: Reorder upcoming tracks with drag-and-drop, play next, or swipe to dismiss.
+- **Spotify-Grade Multi-Tier Queue**: Prioritizes manual user additions (`Play Next`, `Add to Queue`) above playlist context and transient autoplay recommendations. Manually queued tracks persist across new track searches, while stale autoplay recommendations are automatically purged upon starting a new track.
+- **Granular Queue Controls**: Independent "Clear queue" action for user-queued tracks, visual "In Queue" badges, and reorderable drag-and-drop handles.
+- **Custom Playlists & Channels**: Group chapters and series into custom playlists, or explore channels and catalog playlists directly.
 - **Favorites & History**: Quick-access bookmarks and timestamped listening history.
-- **Theming**: Material 3 dark design with interchangeable color palettes (*Emerald*, *Cyan*, *Amethyst*, *Amber*).
+- **Theming**: Premium dark design with high-contrast playback controls and interchangeable color palettes (*Emerald*, *Cyan*, *Amethyst*, *Amber*).
 
 ---
 
@@ -47,28 +50,35 @@ Built following clean architecture principles (**KISS**, **DRY**, **YAGNI**):
 lib/
   main.dart                           # App lifecycle, background audio setup, theme builder
   models/
-    audio_item.dart                   # Audio track model & metadata serialization
-    playlist.dart                     # Custom playlist model
     download_item.dart                # Offline audio metadata & position tracking
+    playlist.dart                     # Custom playlist model
+    youtube_channel_item.dart         # Channel metadata model
+    youtube_playlist_item.dart        # Playlist collection model
+    youtube_search_item.dart          # Audio track model & metadata serialization
   services/
-    audio_service.dart                # Audio track resolution and search services
-    playback_controller.dart          # Playback state, queue, loop/shuffle, and speed controls
-    storage_service.dart              # Local JSON persistence with debounced writes
-    download_service.dart             # Local audio downloader and progress manager
+    audio_handler.dart                # Background audio service & lock-screen media controls
     book_service.dart                 # PDF validation, title sanitization, and query matching
+    download_service.dart             # Local audio downloader and progress manager
+    playback_controller.dart          # Multi-tier playback queue, loop/shuffle, and speed controls
+    storage_service.dart              # Local JSON persistence with debounced writes
+    youtube_service.dart              # Audio resolution, search, channel & playlist discovery
   screens/
+    audiobook_reader_screen.dart      # Immersive PDF reader with audio playback dock
+    channel_detail_screen.dart        # Channel exploration, uploads, and channel playlists
     home_navigation_screen.dart       # Bottom navigation container with docked mini-player
-    search_screen.dart                # Audio discovery & catalog exploration
     library_screen.dart               # Tabbed library (Playlists, Favorites, History, Downloads)
     playlist_detail_screen.dart       # Playlist track list, reordering, and batch management
-    queue_screen.dart                 # Reorderable active playback queue
+    queue_screen.dart                 # Multi-tier active playback queue with user-queue controls
+    search_screen.dart                # Compact audio discovery & catalog exploration
     settings_screen.dart              # Audio quality, themes, and storage management
-    audiobook_reader_screen.dart      # Immersive PDF reader with audio playback dock
+    youtube_playlist_detail_screen.dart # Catalog playlist track list and playback
   widgets/
-    playback_bar.dart                 # Persistent bottom mini-player with isolated progress bar
-    full_player_sheet.dart            # Expandable full now-playing sheet with isolated scrubber
-    track_tile.dart                   # Modular track tile with PDF indicators and quick actions
+    animated_equalizer.dart           # Real-time animated playback indicator
     attach_pdf_sheet.dart             # PDF selector and local file attachment modal
+    full_player_sheet.dart            # Expandable full now-playing sheet with swipe gesture & isolated scrubber
+    marquee_text.dart                 # Smooth auto-scrolling marquee text for long titles
+    playback_bar.dart                 # Persistent bottom mini-player with swipe gestures & progress bar
+    track_tile.dart                   # Modular track tile with PDF indicators and quick actions
 ```
 
 ---
