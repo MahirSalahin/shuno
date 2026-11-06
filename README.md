@@ -47,7 +47,7 @@ Get the latest Android release from the [**GitHub Releases**](https://github.com
 
 Experience true dual-mode immersion by reading the original literature while listening to the audio narration:
 
-- **Distraction-Free Immersion**: Audio controls and top app bars smoothly fade away while reading, collapsing into an ultra-minimal floating pill (`[ || 10/101 ^ ]`) to grant 100% of the screen to your text.
+- **Distraction-Free Immersion**: Audio controls and top app bars smoothly fade away while reading, collapsing into an ultra-minimal floating pill (`⏸ 10 / 101 ⌃`) to grant 100% of the screen to your text.
 - **OLED Dark Mode for Reading**: Toggle dark theme on PDFs to invert pages into soothing white text on pure AMOLED black, eliminating eye strain during night-time reading sessions.
 - **Internet Archive & Local PDF Integration**: Search and attach free public domain books and documents directly from the Internet Archive, or load PDFs from local device storage.
 - **Dual Bookmarking**: Automatically persists your exact reading page and audio timestamp across sessions.
