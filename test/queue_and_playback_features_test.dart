@@ -167,4 +167,45 @@ void main() {
     // Total queue order: ['1', 'new', '2']
     expect(controller.queue.map((e) => e.id).toList(), ['1', 'new', '2']);
   });
+
+  test('Spotify queue model: user queue has top priority and survives playing a new track from search', () async {
+    // 1. Play an initial track
+    await controller.playItem(testItem('song_a'));
+    expect(controller.selected?.id, 'song_a');
+
+    // 2. User explicitly adds a song to queue
+    controller.addToQueue(testItem('user_queued_1'));
+    expect(controller.isUserQueued('user_queued_1'), isTrue);
+    expect(controller.userQueue.length, 1);
+    expect(controller.upNext.first.id, 'user_queued_1');
+
+    // 3. User searches and plays a new track directly
+    await controller.playItem(testItem('song_b'));
+    expect(controller.selected?.id, 'song_b');
+    expect(controller.previousTracks.map((e) => e.id).toList(), ['song_a']);
+
+    // 4. User-queued track is preserved and plays next
+    expect(controller.isUserQueued('user_queued_1'), isTrue);
+    expect(controller.upNext.first.id, 'user_queued_1');
+
+    // 5. Playing next track naturally advances to the user-queued track
+    await controller.skipToNext();
+    expect(controller.selected?.id, 'user_queued_1');
+    expect(controller.previousTracks.map((e) => e.id).toList(), ['song_a', 'song_b']);
+  });
+
+  test('Spotify queue model: clearUserQueue clears only user queue', () async {
+    await controller.playQueue([testItem('c1'), testItem('c2')], initialIndex: 0);
+    controller.addToQueue(testItem('u1'));
+
+    expect(controller.userQueue.length, 1);
+    expect(controller.upNext.length, 2);
+    expect(controller.upNext[0].id, 'u1');
+    expect(controller.upNext[1].id, 'c2');
+
+    controller.clearUserQueue();
+    expect(controller.userQueue, isEmpty);
+    expect(controller.upNext.length, 1);
+    expect(controller.upNext.first.id, 'c2');
+  });
 }

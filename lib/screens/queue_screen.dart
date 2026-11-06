@@ -229,9 +229,9 @@ class QueueScreen extends StatelessWidget {
                                       fit: BoxFit.cover,
                                       errorBuilder:
                                           (context, error, stackTrace) =>
-                                              const Icon(Icons.music_note),
+                                              const Icon(Icons.graphic_eq),
                                     )
-                                  : const Icon(Icons.music_note),
+                                  : const Icon(Icons.graphic_eq),
                             ),
                             title: Text(
                               prev.title,
@@ -259,14 +259,45 @@ class QueueScreen extends StatelessWidget {
 
                 // 3. UP NEXT SECTION (Strictly upcoming tracks)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                  child: Text(
-                    'UP NEXT (${upNext.length})',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      letterSpacing: 1.2,
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'UP NEXT (${upNext.length})',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          letterSpacing: 1.2,
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (playback.userQueue.isNotEmpty)
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 0,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          onPressed: () async {
+                            final confirm = await showConfirmDialog(
+                              context,
+                              title: 'Clear Queue?',
+                              message:
+                                  'Remove all manually queued tracks?',
+                              confirmLabel: 'Clear',
+                            );
+                            if (confirm && context.mounted) {
+                              playback.clearUserQueue();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('User queue cleared')),
+                              );
+                            }
+                          },
+                          child: const Text('Clear queue'),
+                        ),
+                    ],
                   ),
                 ),
 
@@ -391,14 +422,14 @@ class QueueScreen extends StatelessWidget {
                                                   width: 40,
                                                   height: 40,
                                                   color: theme.colorScheme.surfaceContainerHighest,
-                                                  child: const Icon(Icons.music_note, size: 20),
+                                                  child: const Icon(Icons.graphic_eq, size: 20),
                                                 ),
                                               )
                                             : Container(
                                                 width: 40,
                                                 height: 40,
                                                 color: theme.colorScheme.surfaceContainerHighest,
-                                                child: const Icon(Icons.music_note, size: 20),
+                                                child: const Icon(Icons.graphic_eq, size: 20),
                                               ),
                                       ),
                                     ],
@@ -412,14 +443,44 @@ class QueueScreen extends StatelessWidget {
                                       fontSize: 13,
                                     ),
                                   ),
-                                  subtitle: Text(
-                                    item.channelName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
+                                  subtitle: Row(
+                                    children: [
+                                      if (playback.isUserQueued(item.id)) ...[
+                                        Container(
+                                          margin: const EdgeInsets.only(right: 6),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 5,
+                                            vertical: 1,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: theme.colorScheme.primary
+                                                .withAlpha(40),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            'In Queue',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                              color: theme.colorScheme.primary,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                      Expanded(
+                                        child: Text(
+                                          item.channelName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            color: theme.colorScheme
+                                                .onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   trailing: IconButton(
                                     icon: const Icon(Icons.close, size: 18),

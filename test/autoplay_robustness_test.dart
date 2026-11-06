@@ -222,6 +222,30 @@ void main() {
       expect(controller.queue.length, 1);
       expect(controller.upNext, isEmpty);
     });
+
+    test('playing a new track purges previous autoplay recommendations (Spotify queue rule)', () async {
+      final track1 = testTrack('track_1');
+      final track1Related = testTrack('track_1_rel');
+      final track2 = testTrack('track_2');
+      final track2Related = testTrack('track_2_rel');
+
+      // 1. Play track 1, autoplay stages track1Related
+      youtube.relatedItemsToReturn = [track1Related];
+      await controller.playItem(track1);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(controller.upNext.map((e) => e.id).toList(), ['track_1_rel']);
+
+      // 2. User searches and plays track 2
+      youtube.relatedItemsToReturn = [track2Related];
+      await controller.playItem(track2);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      // 3. Stale track1Related recommendation is gone, replaced with track 2 context
+      expect(controller.selected?.id, 'track_2');
+      expect(controller.previousTracks.map((e) => e.id).toList(), ['track_1']);
+      expect(controller.upNext.map((e) => e.id).toList(), ['track_2_rel']);
+      expect(controller.queue.any((t) => t.id == 'track_1_rel'), isFalse);
+    });
   });
 }
 

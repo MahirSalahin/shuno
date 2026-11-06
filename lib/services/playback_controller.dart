@@ -39,8 +39,10 @@ class PlaybackController extends ChangeNotifier {
   StreamSubscription<Duration?>? _durationSubscription;
   StreamSubscription<Duration>? _bufferedSubscription;
 
-  final List<YoutubeSearchItem> _queue = [];
-  int _currentIndex = -1;
+  final List<YoutubeSearchItem> _history = [];
+  final List<YoutubeSearchItem> _userQueue = [];
+  final List<YoutubeSearchItem> _contextQueue = [];
+  final List<YoutubeSearchItem> _autoQueue = [];
 
   YoutubeSearchItem? _selected;
   String? _error;
@@ -71,8 +73,26 @@ class PlaybackController extends ChangeNotifier {
   bool _sleepAtEndOfTrack = false;
   DateTime _lastPositionSave = DateTime.fromMillisecondsSinceEpoch(0);
 
-  List<YoutubeSearchItem> get queue => List.unmodifiable(_queue);
-  int get currentIndex => _currentIndex;
+  List<YoutubeSearchItem> get userQueue => List.unmodifiable(_userQueue);
+  List<YoutubeSearchItem> get contextQueue => List.unmodifiable(_contextQueue);
+  List<YoutubeSearchItem> get autoQueue => List.unmodifiable(_autoQueue);
+
+  List<YoutubeSearchItem> get queue {
+    final list = <YoutubeSearchItem>[];
+    list.addAll(_history);
+    if (_selected != null) {
+      list.add(_selected!);
+    }
+    list.addAll(_userQueue);
+    list.addAll(_contextQueue);
+    list.addAll(_autoQueue);
+    return List.unmodifiable(list);
+  }
+
+  int get currentIndex =>
+      (_selected == null && _history.isEmpty) ? -1 : _history.length;
+
+  bool isUserQueued(String id) => _userQueue.any((item) => item.id == id);
   YoutubeSearchItem? get selected => _selected;
   String? get error => _error;
   bool get isLoading => _loading;
@@ -93,10 +113,12 @@ class PlaybackController extends ChangeNotifier {
   ShunoAudioHandler? get audioHandler => _audioHandler;
 
   bool get hasNext =>
-      _loopMode == PlaybackLoopMode.all ||
-      _currentIndex + 1 < _queue.length ||
+      _userQueue.isNotEmpty ||
+      _contextQueue.isNotEmpty ||
+      _autoQueue.isNotEmpty ||
+      (_loopMode == PlaybackLoopMode.all && queue.isNotEmpty) ||
       (_storageService != null && _storageService.autoplay);
-  bool get hasPrevious => _currentIndex > 0 || _position.inSeconds > 3;
+  bool get hasPrevious => _history.isNotEmpty || _position.inSeconds > 3;
 
   @override
   void notifyListeners() {
@@ -116,7 +138,7 @@ class PlaybackController extends ChangeNotifier {
       bufferedPosition: _bufferedPosition,
       speed: _playbackSpeed,
       error: _error,
-      currentIndex: _currentIndex >= 0 ? _currentIndex : null,
+      currentIndex: currentIndex >= 0 ? currentIndex : null,
       hasPrevious: hasPrevious,
       hasNext: hasNext,
     );
@@ -251,26 +273,25 @@ class PlaybackController extends ChangeNotifier {
     return player;
   }
 
-  List<YoutubeSearchItem> get upNext {
-    if (_currentIndex < 0 || _currentIndex + 1 >= _queue.length) {
-      return const [];
-    }
-    return List.unmodifiable(_queue.sublist(_currentIndex + 1));
-  }
+  List<YoutubeSearchItem> get upNext =>
+      List.unmodifiable([..._userQueue, ..._contextQueue, ..._autoQueue]);
 
-  List<YoutubeSearchItem> get previousTracks {
-    if (_currentIndex <= 0) {
-      return const [];
-    }
-    return List.unmodifiable(_queue.sublist(0, _currentIndex));
-  }
+  List<YoutubeSearchItem> get previousTracks => List.unmodifiable(_history);
 
   void clearUpNext() {
-    if (_queue.isEmpty || _currentIndex < 0) return;
-    if (_currentIndex + 1 < _queue.length) {
-      _queue.removeRange(_currentIndex + 1, _queue.length);
-      notifyListeners();
-    }
+    if (_userQueue.isEmpty && _contextQueue.isEmpty && _autoQueue.isEmpty) return;
+    _userQueue.clear();
+    _contextQueue.clear();
+    _autoQueue.clear();
+    _audioHandler?.updateQueueFromSearchItems(queue);
+    notifyListeners();
+  }
+
+  void clearUserQueue() {
+    if (_userQueue.isEmpty) return;
+    _userQueue.clear();
+    _audioHandler?.updateQueueFromSearchItems(queue);
+    notifyListeners();
   }
 
   void preWarmTrack(String videoId, {bool highQuality = true}) {
@@ -284,17 +305,25 @@ class PlaybackController extends ChangeNotifier {
 
   Future<void> playItem(YoutubeSearchItem item, {Duration? initialPosition}) async {
     if (_disposed || _loading) return;
-    // If item is already in queue, jump to it. Otherwise, insert after current track.
-    final existingIndex = _queue.indexWhere((e) => e.id == item.id);
-    if (existingIndex >= 0) {
-      _currentIndex = existingIndex;
-    } else if (_queue.isEmpty || _currentIndex < 0) {
-      _queue.add(item);
-      _currentIndex = 0;
-    } else {
-      _currentIndex++;
-      _queue.insert(_currentIndex, item);
+    if (_selected?.id == item.id) {
+      if (initialPosition != null) {
+        await seek(initialPosition);
+      }
+      return;
     }
+
+    _userQueue.removeWhere((e) => e.id == item.id);
+    _contextQueue.removeWhere((e) => e.id == item.id);
+    _history.removeWhere((e) => e.id == item.id);
+    // Spotify behavior: purge transient autoplay recommendations when user plays a new track
+    _autoQueue.clear();
+
+    if (_selected != null) {
+      _history.add(_selected!);
+    }
+    _selected = item;
+    _audioHandler?.updateQueueFromSearchItems(queue);
+    notifyListeners();
     await _loadAndPlay(item, initialPosition: initialPosition);
   }
 
@@ -303,72 +332,129 @@ class PlaybackController extends ChangeNotifier {
     int initialIndex = 0,
   }) async {
     if (items.isEmpty) return;
-    _queue.clear();
-    _queue.addAll(items);
+    _history.clear();
+    _userQueue.clear();
+    _contextQueue.clear();
+    _autoQueue.clear();
     _originalQueueOrder = List.of(items);
-    _currentIndex = initialIndex.clamp(0, _queue.length - 1);
-    await _loadAndPlay(_queue[_currentIndex]);
+    final clampedIndex = initialIndex.clamp(0, items.length - 1);
+    _history.addAll(items.take(clampedIndex));
+    final current = items[clampedIndex];
+    _selected = current;
+    _contextQueue.addAll(items.skip(clampedIndex + 1));
+    _audioHandler?.updateQueueFromSearchItems(queue);
+    notifyListeners();
+    await _loadAndPlay(current);
   }
 
   void addToQueue(YoutubeSearchItem item) {
-    if (!_queue.any((e) => e.id == item.id)) {
-      _queue.add(item);
-      _audioHandler?.updateQueueFromSearchItems(_queue);
-      notifyListeners();
-      if (_selected == null && !_loading) {
-        playItem(item);
-      }
+    _userQueue.removeWhere((e) => e.id == item.id);
+    _contextQueue.removeWhere((e) => e.id == item.id);
+    _autoQueue.removeWhere((e) => e.id == item.id);
+    _userQueue.add(item);
+    _audioHandler?.updateQueueFromSearchItems(queue);
+    notifyListeners();
+    if (_selected == null && !_loading) {
+      playItem(item);
     }
   }
 
   void playNext(YoutubeSearchItem item) {
-    if (_queue.isEmpty || _currentIndex < 0) {
+    if (_selected == null) {
       playItem(item);
       return;
     }
-    _queue.removeWhere((e) => e.id == item.id);
-    final insertIndex = (_currentIndex + 1).clamp(0, _queue.length);
-    _queue.insert(insertIndex, item);
-    _audioHandler?.updateQueueFromSearchItems(_queue);
+    _userQueue.removeWhere((e) => e.id == item.id);
+    _contextQueue.removeWhere((e) => e.id == item.id);
+    _autoQueue.removeWhere((e) => e.id == item.id);
+    _userQueue.insert(0, item);
+    _audioHandler?.updateQueueFromSearchItems(queue);
     notifyListeners();
   }
 
   void removeAt(int index) {
-    if (index < 0 || index >= _queue.length) return;
-    final isCurrent = index == _currentIndex;
-    _queue.removeAt(index);
-    _audioHandler?.updateQueueFromSearchItems(_queue);
-    if (_currentIndex > index) {
-      _currentIndex--;
-    } else if (isCurrent) {
-      if (_queue.isEmpty) {
-        _currentIndex = -1;
-        _selected = null;
-        _player?.stop();
+    final total = queue;
+    if (index < 0 || index >= total.length) return;
+
+    if (index < _history.length) {
+      _history.removeAt(index);
+      _audioHandler?.updateQueueFromSearchItems(queue);
+      notifyListeners();
+      return;
+    }
+
+    final currentIndexPos = _history.length;
+    if (index == currentIndexPos) {
+      if (_userQueue.isNotEmpty || _contextQueue.isNotEmpty || _autoQueue.isNotEmpty) {
+        unawaited(skipToNext());
+      } else if (_history.isNotEmpty) {
+        final prev = _history.removeLast();
+        _selected = prev;
+        _audioHandler?.updateQueueFromSearchItems(queue);
+        notifyListeners();
+        unawaited(_loadAndPlay(prev));
       } else {
-        _currentIndex = _currentIndex.clamp(0, _queue.length - 1);
-        _loadAndPlay(_queue[_currentIndex]);
+        clearQueue();
+      }
+      return;
+    }
+
+    var upNextIndex = index - (currentIndexPos + 1);
+    if (upNextIndex < _userQueue.length) {
+      _userQueue.removeAt(upNextIndex);
+    } else {
+      upNextIndex -= _userQueue.length;
+      if (upNextIndex < _contextQueue.length) {
+        _contextQueue.removeAt(upNextIndex);
+      } else {
+        upNextIndex -= _contextQueue.length;
+        if (upNextIndex < _autoQueue.length) {
+          _autoQueue.removeAt(upNextIndex);
+        }
       }
     }
+    _audioHandler?.updateQueueFromSearchItems(queue);
     notifyListeners();
   }
 
   void reorder(int oldIndex, int newIndex) {
-    if (oldIndex < 0 || oldIndex >= _queue.length) return;
+    final total = queue;
+    if (oldIndex < 0 || oldIndex >= total.length) return;
     if (newIndex > oldIndex) newIndex--;
-    final item = _queue.removeAt(oldIndex);
-    final clampedNewIndex = newIndex.clamp(0, _queue.length);
-    _queue.insert(clampedNewIndex, item);
-    if (_selected != null) {
-      _currentIndex = _queue.indexOf(_selected!);
+    final clampedNewIndex = newIndex.clamp(0, total.length - 1);
+    if (oldIndex == clampedNewIndex) return;
+
+    final currentIndexPos = _history.length;
+    final upNextStart = currentIndexPos + 1;
+
+    if (oldIndex >= upNextStart && clampedNewIndex >= upNextStart) {
+      final upNextList = [..._userQueue, ..._contextQueue, ..._autoQueue];
+      final relOld = oldIndex - upNextStart;
+      final relNew = (clampedNewIndex - upNextStart).clamp(0, upNextList.length - 1);
+      if (relOld >= 0 && relOld < upNextList.length) {
+        final item = upNextList.removeAt(relOld);
+        upNextList.insert(relNew, item);
+
+        final targetUserCount = (relNew < _userQueue.length || relOld < _userQueue.length)
+            ? (_userQueue.length + (relOld >= _userQueue.length ? 1 : 0))
+            : _userQueue.length;
+        final safeUserCount = targetUserCount.clamp(0, upNextList.length);
+        _userQueue.clear();
+        _userQueue.addAll(upNextList.take(safeUserCount));
+        _contextQueue.clear();
+        _contextQueue.addAll(upNextList.skip(safeUserCount));
+        _autoQueue.clear();
+      }
     }
-    _audioHandler?.updateQueueFromSearchItems(_queue);
+    _audioHandler?.updateQueueFromSearchItems(queue);
     notifyListeners();
   }
 
   void clearQueue() {
-    _queue.clear();
-    _currentIndex = -1;
+    _history.clear();
+    _userQueue.clear();
+    _contextQueue.clear();
+    _autoQueue.clear();
     _selected = null;
     _audioHandler?.updateMediaItemFromSearchItem(null);
     _audioHandler?.updateQueueFromSearchItems(const []);
@@ -396,7 +482,7 @@ class PlaybackController extends ChangeNotifier {
     _duration = item.duration ?? Duration.zero;
     _durationNotifier.value = _duration;
     _audioHandler?.updateMediaItemFromSearchItem(item);
-    _audioHandler?.updateQueueFromSearchItems(_queue);
+    _audioHandler?.updateQueueFromSearchItems(queue);
     notifyListeners();
 
     try {
@@ -527,10 +613,24 @@ class PlaybackController extends ChangeNotifier {
   Future<void> skipToNext() async {
     if (_disposed || _loading) return;
 
-    // 1. Try remaining tracks in the queue first
-    while (_currentIndex + 1 < _queue.length) {
-      _currentIndex++;
-      await _loadAndPlay(_queue[_currentIndex]);
+    // 1. Try remaining tracks in userQueue, contextQueue, autoQueue in order of priority
+    while (_userQueue.isNotEmpty || _contextQueue.isNotEmpty || _autoQueue.isNotEmpty) {
+      final YoutubeSearchItem candidate;
+      if (_userQueue.isNotEmpty) {
+        candidate = _userQueue.removeAt(0);
+      } else if (_contextQueue.isNotEmpty) {
+        candidate = _contextQueue.removeAt(0);
+      } else {
+        candidate = _autoQueue.removeAt(0);
+      }
+
+      if (_selected != null) {
+        _history.add(_selected!);
+      }
+      _selected = candidate;
+      _audioHandler?.updateQueueFromSearchItems(queue);
+      notifyListeners();
+      await _loadAndPlay(candidate);
       if (_error == null) {
         return;
       }
@@ -541,10 +641,21 @@ class PlaybackController extends ChangeNotifier {
       // Autoplay is active: skip past the unplayable track and try next
     }
 
-    if (_loopMode == PlaybackLoopMode.all && _queue.isNotEmpty) {
-      _currentIndex = 0;
-      await _loadAndPlay(_queue[0]);
-      return;
+    if (_loopMode == PlaybackLoopMode.all && queue.isNotEmpty) {
+      final allTracks = List<YoutubeSearchItem>.from(queue);
+      if (allTracks.isNotEmpty) {
+        _history.clear();
+        _userQueue.clear();
+        _contextQueue.clear();
+        _autoQueue.clear();
+        final first = allTracks.first;
+        _selected = first;
+        _contextQueue.addAll(allTracks.skip(1));
+        _audioHandler?.updateQueueFromSearchItems(queue);
+        notifyListeners();
+        await _loadAndPlay(first);
+        return;
+      }
     }
 
     // 2. Autoplay fallback: fetch related videos if enabled and nothing staged yet
@@ -553,20 +664,22 @@ class PlaybackController extends ChangeNotifier {
         final current = _selected!;
         final related = await _youtubeService.getRelatedVideos(current);
         if (_disposed) return;
-        final unplayed = related.where((r) => !_queue.any((q) => q.id == r.id)).toList();
+        final existingIds = queue.map((q) => q.id).toSet();
+        final unplayed = related.where((r) => !existingIds.contains(r.id)).toList();
 
         // Multi-candidate fallback: try up to 3 candidates so 403 or dead links don't kill autoplay
         for (final candidate in unplayed.take(3)) {
           if (_disposed) return;
-          _queue.add(candidate);
-          _currentIndex = _queue.length - 1;
+          if (_selected != null) {
+            _history.add(_selected!);
+          }
+          _selected = candidate;
+          _audioHandler?.updateQueueFromSearchItems(queue);
+          notifyListeners();
           await _loadAndPlay(candidate);
           if (_error == null) {
             return;
           }
-          // Failed to load candidate: remove and try next candidate
-          _queue.removeLast();
-          _currentIndex = _queue.length - 1;
         }
       } catch (e) {
         if (kDebugMode) debugPrint('Autoplay fetch failed: $e');
@@ -583,8 +696,8 @@ class PlaybackController extends ChangeNotifier {
     if (storage == null || !storage.autoplay) return;
     if (_loopMode != PlaybackLoopMode.off) return;
 
-    // Only stage when at or beyond the current last track of the queue
-    if (_currentIndex + 1 < _queue.length) return;
+    // Only stage when no upcoming tracks remain in any queue tier
+    if (_userQueue.isNotEmpty || _contextQueue.isNotEmpty || _autoQueue.isNotEmpty) return;
     final current = _selected;
     if (current == null) return;
 
@@ -594,14 +707,15 @@ class PlaybackController extends ChangeNotifier {
       if (_disposed) return;
       if (_storageService?.autoplay != true) return;
       if (_loopMode != PlaybackLoopMode.off) return;
-      if (_currentIndex + 1 < _queue.length) return;
+      if (_userQueue.isNotEmpty || _contextQueue.isNotEmpty || _autoQueue.isNotEmpty) return;
       if (_selected?.id != current.id) return;
 
-      final unplayed = related.where((r) => !_queue.any((q) => q.id == r.id)).toList();
+      final existingIds = queue.map((q) => q.id).toSet();
+      final unplayed = related.where((r) => !existingIds.contains(r.id)).toList();
       if (unplayed.isNotEmpty) {
         final nextItem = unplayed.first;
-        _queue.add(nextItem);
-        _audioHandler?.updateQueueFromSearchItems(_queue);
+        _autoQueue.add(nextItem);
+        _audioHandler?.updateQueueFromSearchItems(queue);
         notifyListeners();
 
         // Pre-warm audio stream resolution while network and wake-lock are active
@@ -623,9 +737,15 @@ class PlaybackController extends ChangeNotifier {
       return;
     }
 
-    if (_currentIndex > 0) {
-      _currentIndex--;
-      await _loadAndPlay(_queue[_currentIndex]);
+    if (_history.isNotEmpty) {
+      final prev = _history.removeLast();
+      if (_selected != null) {
+        _contextQueue.insert(0, _selected!);
+      }
+      _selected = prev;
+      _audioHandler?.updateQueueFromSearchItems(queue);
+      notifyListeners();
+      await _loadAndPlay(prev);
     } else {
       await seek(Duration.zero);
     }
@@ -664,26 +784,17 @@ class PlaybackController extends ChangeNotifier {
   void toggleShuffle() {
     _isShuffle = !_isShuffle;
     if (_isShuffle) {
-      _originalQueueOrder = List.of(_queue);
-      if (_selected != null) {
-        final remaining = _queue.where((e) => e.id != _selected!.id).toList()
-          ..shuffle();
-        _queue.clear();
-        _queue.add(_selected!);
-        _queue.addAll(remaining);
-        _currentIndex = 0;
-      } else {
-        _queue.shuffle();
-      }
+      _originalQueueOrder = List.of(queue);
+      _contextQueue.shuffle();
     } else {
       if (_originalQueueOrder.isNotEmpty) {
-        _queue.clear();
-        _queue.addAll(_originalQueueOrder);
-        if (_selected != null) {
-          _currentIndex = _queue.indexOf(_selected!);
-        }
+        final currentId = _selected?.id;
+        final remaining = _originalQueueOrder.where((e) => e.id != currentId).toList();
+        _contextQueue.clear();
+        _contextQueue.addAll(remaining);
       }
     }
+    _audioHandler?.updateQueueFromSearchItems(queue);
     notifyListeners();
   }
 
@@ -708,8 +819,10 @@ class PlaybackController extends ChangeNotifier {
         unawaited(_play(_request));
         return;
       }
-      if (_currentIndex + 1 < _queue.length ||
-          (_loopMode == PlaybackLoopMode.all && _queue.isNotEmpty) ||
+      if (_userQueue.isNotEmpty ||
+          _contextQueue.isNotEmpty ||
+          _autoQueue.isNotEmpty ||
+          (_loopMode == PlaybackLoopMode.all && queue.isNotEmpty) ||
           (_storageService != null && _storageService.autoplay)) {
         await skipToNext();
       }
