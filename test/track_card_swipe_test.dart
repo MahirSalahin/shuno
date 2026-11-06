@@ -76,18 +76,18 @@ void main() {
       final prevFinder = find.widgetWithIcon(IconButton, Icons.skip_previous);
       expect(prevFinder, findsOneWidget);
       final prevBtn = tester.widget<IconButton>(prevFinder);
-      expect(prevBtn.iconSize, 28);
+      expect(prevBtn.iconSize, 34);
 
       final nextFinder = find.widgetWithIcon(IconButton, Icons.skip_next);
       expect(nextFinder, findsOneWidget);
       final nextBtn = tester.widget<IconButton>(nextFinder);
-      expect(nextBtn.iconSize, 28);
+      expect(nextBtn.iconSize, 34);
 
-      // Hero Play/Pause button rendered with enlarged 34px icon
+      // Hero Play/Pause button rendered with enlarged 38px icon
       final playFinder = find.widgetWithIcon(IconButton, Icons.pause);
       expect(playFinder, findsOneWidget);
       final playBtn = tester.widget<IconButton>(playFinder);
-      expect(playBtn.iconSize, 34);
+      expect(playBtn.iconSize, 38);
 
       // Icons distributed cleanly across layout tiers
       // Top bar: sleep timer & add to playlist
@@ -98,10 +98,11 @@ void main() {
       expect(find.byIcon(Icons.arrow_circle_down_outlined), findsOneWidget);
       expect(find.byIcon(Icons.favorite_border), findsOneWidget);
 
-      // Bottom bar: speed badge (1x), book reader & queue
+      // Bottom bar: speed badge (1x), book reader & queue (non-music, badge-free)
       expect(find.text('1x'), findsOneWidget);
       expect(find.byIcon(Icons.auto_stories_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.queue_music), findsOneWidget);
+      expect(find.byIcon(Icons.playlist_play), findsOneWidget);
+      expect(find.byType(Badge), findsNothing);
     });
 
     testWidgets('Swiping left on track card in FullPlayerSheet skips to next track', (tester) async {

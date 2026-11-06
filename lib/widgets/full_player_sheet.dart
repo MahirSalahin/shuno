@@ -362,7 +362,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                   const titleToScrubber = 12.0;
                   const scrubberHeight = 44.0;
                   const scrubberToControls = 14.0;
-                  const controlsHeight = 64.0;
+                  const controlsHeight = 68.0;
                   const bottomToolbarHeight = 44.0;
                   const bottomPadding = 10.0;
 
@@ -794,13 +794,13 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
             ),
             const SizedBox(height: 14),
 
-            // Playback Controls Row
+            // Playback Controls Row (Layer 1 - prominent touch targets)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 // Shuffle
                 IconButton(
-                  iconSize: 22,
+                  iconSize: 26,
                   icon: Icon(
                     Icons.shuffle,
                     color: playback.isShuffle ? theme.colorScheme.primary : null,
@@ -812,7 +812,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                 ),
                 // Previous
                 IconButton(
-                  iconSize: 28,
+                  iconSize: 34,
                   icon: const Icon(Icons.skip_previous),
                   tooltip: 'Previous',
                   onPressed: playback.skipToPrevious,
@@ -820,11 +820,11 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                 // Play / Pause / Replay with Glow
                 if (playback.isLoading)
                   SizedBox(
-                    width: 60,
-                    height: 60,
+                    width: 68,
+                    height: 68,
                     child: Center(
                       child: CircularProgressIndicator(
-                        strokeWidth: 2.8,
+                        strokeWidth: 3.2,
                         color: theme.colorScheme.primary,
                       ),
                     ),
@@ -835,18 +835,18 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: theme.colorScheme.primary.withAlpha(90),
-                          blurRadius: 16,
-                          spreadRadius: 1,
+                          color: theme.colorScheme.primary.withAlpha(95),
+                          blurRadius: 18,
+                          spreadRadius: 2,
                         ),
                       ],
                     ),
                     child: IconButton.filled(
-                      iconSize: 34,
+                      iconSize: 38,
                       style: IconButton.styleFrom(
                         backgroundColor: theme.colorScheme.primary,
                         foregroundColor: Colors.black,
-                        padding: const EdgeInsets.all(13),
+                        padding: const EdgeInsets.all(15),
                       ),
                       tooltip: playback.error != null
                           ? 'Retry'
@@ -869,14 +869,14 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                   ),
                 // Next
                 IconButton(
-                  iconSize: 28,
+                  iconSize: 34,
                   icon: const Icon(Icons.skip_next),
                   tooltip: 'Next',
                   onPressed: playback.skipToNext,
                 ),
                 // Repeat
                 IconButton(
-                  iconSize: 22,
+                  iconSize: 26,
                   icon: Icon(
                     playback.loopMode == PlaybackLoopMode.one
                         ? Icons.repeat_one
@@ -968,30 +968,19 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                     ],
                   ),
 
-                  // Right group: Queue Icon (Clean, with badge)
+                  // Right group: Queue Icon (Clean, non-music icon, no badge)
                   IconButton(
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints.tightFor(width: 42, height: 42),
-                    icon: Badge(
-                      isLabelVisible: playback.upNext.isNotEmpty,
-                      label: Text(
-                        '${playback.upNext.length}',
-                        style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold),
-                      ),
-                      backgroundColor: theme.colorScheme.primary,
-                      textColor: Colors.black,
-                      child: Icon(
-                        Icons.queue_music,
-                        size: 24,
-                        color: playback.upNext.isNotEmpty
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.onSurfaceVariant,
-                      ),
+                    icon: Icon(
+                      Icons.playlist_play,
+                      size: 28,
+                      color: playback.upNext.isNotEmpty
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurfaceVariant,
                     ),
-                    tooltip: playback.upNext.isNotEmpty
-                        ? 'Queue (${playback.upNext.length})'
-                        : 'Queue',
+                    tooltip: 'Queue',
                     onPressed: () {
                       Navigator.of(context).pop();
                       widget.onOpenQueue?.call();
