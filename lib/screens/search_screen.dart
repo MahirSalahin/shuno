@@ -172,6 +172,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -207,50 +208,63 @@ class _SearchScreenState extends State<SearchScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _queryController,
-                      enabled: !_isLoading,
-                      textInputAction: TextInputAction.search,
-                      onSubmitted: (_) => _search(),
-                      onChanged: (_) {
-                        if (_inputError != null) {
-                          setState(() => _inputError = null);
-                        } else {
-                          setState(() {});
-                        }
-                      },
-                      decoration: InputDecoration(
-                        hintText: 'Search songs, artists, podcasts…',
-                        prefixIcon: const Icon(Icons.search, size: 22),
-                        suffixIcon: _queryController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () {
-                                  _queryController.clear();
-                                  setState(() {});
-                                },
-                              )
-                            : null,
-                        errorText: _inputError,
+              child: TextField(
+                controller: _queryController,
+                enabled: !_isLoading,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => _search(),
+                onChanged: (_) {
+                  if (_inputError != null) {
+                    setState(() => _inputError = null);
+                  } else {
+                    setState(() {});
+                  }
+                },
+                decoration: InputDecoration(
+                  hintText: 'Search songs, artists, podcasts…',
+                  prefixIcon: const Icon(Icons.search, size: 22),
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_queryController.text.isNotEmpty)
+                        IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          tooltip: 'Clear',
+                          onPressed: () {
+                            _queryController.clear();
+                            setState(() {});
+                          },
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: SizedBox(
+                          width: 34,
+                          height: 34,
+                          child: FilledButton(
+                            style: FilledButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              backgroundColor: _queryController.text.trim().isNotEmpty
+                                  ? theme.colorScheme.primary
+                                  : Colors.white.withAlpha(22),
+                              foregroundColor: _queryController.text.trim().isNotEmpty
+                                  ? Colors.black
+                                  : Colors.white.withAlpha(140),
+                            ),
+                            onPressed: _isLoading ? null : () => _search(),
+                            child: const Icon(Icons.arrow_forward_rounded, size: 18),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.all(12),
-                      minimumSize: const Size(48, 48),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                    ),
-                    onPressed: _isLoading ? null : () => _search(),
-                    child: const Icon(Icons.search_rounded, size: 22),
-                  ),
-                ],
+                  errorText: _inputError,
+                ),
               ),
             ),
             if (_hasSearched &&
