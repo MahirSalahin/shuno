@@ -273,7 +273,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           setState(() => _selectedCategory = SearchCategory.tracks);
                         }
                       },
-                      avatar: const Icon(Icons.music_note, size: 16),
+                      avatar: const Icon(Icons.graphic_eq, size: 16),
                       visualDensity: VisualDensity.compact,
                     ),
                     const SizedBox(width: 8),

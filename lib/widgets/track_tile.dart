@@ -472,7 +472,7 @@ class TrackTile extends StatelessWidget {
                         const PopupMenuItem(
                           value: 'add_queue',
                           child: ListTile(
-                            leading: Icon(Icons.queue_music),
+                            leading: Icon(Icons.playlist_add_check),
                             title: Text('Add to Queue'),
                             contentPadding: EdgeInsets.zero,
                           ),

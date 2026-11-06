@@ -59,8 +59,6 @@ class _HomeNavigationScreenState extends State<HomeNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final upcomingCount = widget.playbackController.upNext.length;
-
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
@@ -120,21 +118,13 @@ class _HomeNavigationScreenState extends State<HomeNavigationScreen> {
                     label: 'Search',
                   ),
                   const NavigationDestination(
-                    icon: Icon(Icons.library_music_outlined),
-                    selectedIcon: Icon(Icons.library_music),
+                    icon: Icon(Icons.library_books_outlined),
+                    selectedIcon: Icon(Icons.library_books),
                     label: 'Library',
                   ),
-                  NavigationDestination(
-                    icon: Badge(
-                      isLabelVisible: upcomingCount > 0,
-                      label: Text('$upcomingCount'),
-                      child: const Icon(Icons.queue_music_outlined),
-                    ),
-                    selectedIcon: Badge(
-                      isLabelVisible: upcomingCount > 0,
-                      label: Text('$upcomingCount'),
-                      child: const Icon(Icons.queue_music),
-                    ),
+                  const NavigationDestination(
+                    icon: Icon(Icons.playlist_play_outlined),
+                    selectedIcon: Icon(Icons.playlist_play),
                     label: 'Queue',
                   ),
                   const NavigationDestination(

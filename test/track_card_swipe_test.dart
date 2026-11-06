@@ -207,5 +207,39 @@ void main() {
       expect(controller.currentIndex, 0);
       expect(controller.selected?.id, '1');
     });
+
+    testWidgets('Dragging horizontally on PlaybackBar animates title text offset', (tester) async {
+      await controller.playQueue([sampleTrack('1'), sampleTrack('2')], initialIndex: 0);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            bottomNavigationBar: PlaybackBar(
+              controller: controller,
+              storageService: storage,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final gesture = await tester.startGesture(tester.getCenter(find.byType(PlaybackBar)));
+      await gesture.moveBy(const Offset(-25, 0));
+      await tester.pump(const Duration(milliseconds: 20));
+      await gesture.moveBy(const Offset(-35, 0));
+      await tester.pump();
+
+      // Verify the animated container holding the text reflects the active drag offset
+      final animatedContainers = tester.widgetList<AnimatedContainer>(find.byType(AnimatedContainer));
+      final translatingContainer = animatedContainers.firstWhere(
+        (c) => c.transform != null,
+      );
+      expect(translatingContainer.transform, isNotNull);
+      final matrix = translatingContainer.transform!;
+      expect(matrix.getTranslation().x, lessThan(0.0));
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+    });
   });
 }

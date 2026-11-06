@@ -179,7 +179,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        Icons.queue_music,
+                        Icons.playlist_play,
                         size: 56,
                         color: theme.colorScheme.outline,
                       ),

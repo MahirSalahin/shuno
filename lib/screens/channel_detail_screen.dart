@@ -468,7 +468,7 @@ class _ChannelDetailScreenState extends State<ChannelDetailScreen> {
                                     label: const Text('Tracks'),
                                     selected: _currentTab == ChannelTab.tracks,
                                     showCheckmark: false,
-                                    avatar: const Icon(Icons.music_note, size: 16),
+                                    avatar: const Icon(Icons.graphic_eq, size: 16),
                                     visualDensity: VisualDensity.compact,
                                     onSelected: (selected) {
                                       if (selected) {

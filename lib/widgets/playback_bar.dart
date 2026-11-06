@@ -5,7 +5,7 @@ import '../services/playback_controller.dart';
 import '../services/storage_service.dart';
 import 'full_player_sheet.dart';
 
-class PlaybackBar extends StatelessWidget {
+class PlaybackBar extends StatefulWidget {
   const PlaybackBar({
     super.key,
     required this.controller,
@@ -20,12 +20,29 @@ class PlaybackBar extends StatelessWidget {
   final VoidCallback? onOpenQueue;
 
   @override
+  State<PlaybackBar> createState() => _PlaybackBarState();
+}
+
+class _PlaybackBarState extends State<PlaybackBar> {
+  double _dragOffset = 0.0;
+  bool _isDragging = false;
+  int _transitionDirection = 0; // -1 for swiping left (next), 1 for swiping right (prev)
+  String? _lastItemId;
+
+  @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
         final item = controller.selected;
         if (item == null) return const SizedBox.shrink();
+
+        // Track when item changes to trigger a smooth transition
+        if (_lastItemId != null && _lastItemId != item.id && _transitionDirection == 0) {
+          _transitionDirection = -1;
+        }
+        _lastItemId = item.id;
 
         final theme = Theme.of(context);
         final error = controller.error;
@@ -41,7 +58,6 @@ class PlaybackBar extends StatelessWidget {
                 ? 'Playing'
                 : 'Paused');
 
-        double dragDistance = 0.0;
         return RepaintBoundary(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
@@ -65,36 +81,54 @@ class PlaybackBar extends StatelessWidget {
               child: GestureDetector(
                 behavior: HitTestBehavior.translucent,
                 onHorizontalDragStart: (_) {
-                  dragDistance = 0.0;
+                  setState(() {
+                    _isDragging = true;
+                    _dragOffset = 0.0;
+                  });
                 },
                 onHorizontalDragUpdate: (details) {
-                  dragDistance += details.primaryDelta ?? 0.0;
+                  setState(() {
+                    _dragOffset = (_dragOffset + (details.primaryDelta ?? 0.0))
+                        .clamp(-140.0, 140.0);
+                  });
                 },
                 onHorizontalDragEnd: (details) {
                   final velocity = details.primaryVelocity ?? 0.0;
-                  if (dragDistance < -35.0 || velocity < -200.0) {
-                    if (controller.hasNext) {
-                      controller.skipToNext();
-                    }
-                  } else if (dragDistance > 35.0 || velocity > 200.0) {
+                  final shouldNext = _dragOffset < -35.0 || velocity < -200.0;
+                  final shouldPrev = _dragOffset > 35.0 || velocity > 200.0;
+
+                  if (shouldNext && controller.hasNext) {
+                    _transitionDirection = -1;
+                    controller.skipToNext();
+                  } else if (shouldPrev) {
+                    _transitionDirection = 1;
                     controller.skipToPrevious();
                   }
-                  dragDistance = 0.0;
+
+                  setState(() {
+                    _isDragging = false;
+                    _dragOffset = 0.0;
+                  });
                 },
                 onHorizontalDragCancel: () {
-                  dragDistance = 0.0;
+                  if (_isDragging) {
+                    setState(() {
+                      _isDragging = false;
+                      _dragOffset = 0.0;
+                    });
+                  }
                 },
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: () {
-                      if (storageService != null) {
+                      if (widget.storageService != null) {
                         FullPlayerSheet.show(
                           context,
                           playback: controller,
-                          storage: storageService!,
-                          downloadService: downloadService,
-                          onOpenQueue: onOpenQueue,
+                          storage: widget.storageService!,
+                          downloadService: widget.downloadService,
+                          onOpenQueue: widget.onOpenQueue,
                         );
                       }
                     },
@@ -122,63 +156,105 @@ class PlaybackBar extends StatelessWidget {
                                         width: 46,
                                         height: 46,
                                         color: theme.colorScheme.surfaceContainerHighest,
-                                        child: const Icon(Icons.music_note, size: 22),
+                                        child: const Icon(Icons.graphic_eq, size: 22),
                                       ),
                                     )
                                   : Container(
                                       width: 46,
                                       height: 46,
                                       color: theme.colorScheme.surfaceContainerHighest,
-                                      child: const Icon(Icons.music_note, size: 22),
+                                      child: const Icon(Icons.graphic_eq, size: 22),
                                     ),
                             ),
                             const SizedBox(width: 12),
 
-                            // Title & Subtitle Info
+                            // Title & Subtitle Info with Live Interactive Horizontal Drag Offset
                             Expanded(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13.5,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Row(
-                                    children: [
-                                      if (controller.isLoading || controller.isBuffering) ...[
-                                        Container(
-                                          width: 6,
-                                          height: 6,
-                                          margin: const EdgeInsets.only(right: 6),
-                                          decoration: BoxDecoration(
-                                            color: theme.colorScheme.primary,
-                                            shape: BoxShape.circle,
+                              child: ClipRect(
+                                child: AnimatedContainer(
+                                  duration: _isDragging
+                                      ? Duration.zero
+                                      : const Duration(milliseconds: 240),
+                                  curve: Curves.easeOutCubic,
+                                  transform: Matrix4.translationValues(_dragOffset, 0, 0),
+                                  child: Opacity(
+                                    opacity: (1.0 - (_dragOffset.abs() / 200.0)).clamp(0.25, 1.0),
+                                    child: AnimatedSwitcher(
+                                      duration: const Duration(milliseconds: 220),
+                                      transitionBuilder: (child, animation) {
+                                        final inOffset = Tween<Offset>(
+                                          begin: Offset(
+                                            _transitionDirection < 0
+                                                ? 0.35
+                                                : (_transitionDirection > 0 ? -0.35 : 0.0),
+                                            0.0,
                                           ),
-                                        ),
-                                      ],
-                                      Expanded(
-                                        child: Text(
-                                          error ?? status,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: theme.textTheme.bodySmall?.copyWith(
-                                            color: error != null
-                                                ? theme.colorScheme.error
-                                                : theme.colorScheme.onSurfaceVariant,
-                                            fontSize: 12,
+                                          end: Offset.zero,
+                                        ).animate(
+                                          CurvedAnimation(
+                                            parent: animation,
+                                            curve: Curves.easeOutCubic,
                                           ),
+                                        );
+
+                                        return FadeTransition(
+                                          opacity: animation,
+                                          child: SlideTransition(
+                                            position: inOffset,
+                                            child: child,
+                                          ),
+                                        );
+                                      },
+                                      child: KeyedSubtree(
+                                        key: ValueKey(item.id),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              item.title,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: theme.textTheme.titleSmall?.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13.5,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Row(
+                                              children: [
+                                                if (controller.isLoading || controller.isBuffering) ...[
+                                                  Container(
+                                                    width: 6,
+                                                    height: 6,
+                                                    margin: const EdgeInsets.only(right: 6),
+                                                    decoration: BoxDecoration(
+                                                      color: theme.colorScheme.primary,
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                  ),
+                                                ],
+                                                Expanded(
+                                                  child: Text(
+                                                    error ?? status,
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    style: theme.textTheme.bodySmall?.copyWith(
+                                                      color: error != null
+                                                          ? theme.colorScheme.error
+                                                          : theme.colorScheme.onSurfaceVariant,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                    ],
+                                    ),
                                   ),
-                                ],
+                                ),
                               ),
                             ),
                             const SizedBox(width: 6),

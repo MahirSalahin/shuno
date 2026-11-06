@@ -86,7 +86,7 @@ class QueueScreen extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    Icons.queue_music,
+                    Icons.playlist_play,
                     size: 64,
                     color: theme.colorScheme.outline,
                   ),
@@ -97,7 +97,7 @@ class QueueScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Search for music and tap play or add to queue',
+                    'Search for audio and tap play or add to queue',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),

@@ -72,7 +72,7 @@ class ChannelPlaylistTile extends StatelessWidget {
                   Row(
                     children: [
                       Icon(
-                        Icons.queue_music,
+                        Icons.playlist_play,
                         size: 14,
                         color: theme.colorScheme.primary,
                       ),

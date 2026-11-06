@@ -567,7 +567,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                                             color: theme
                                                 .colorScheme.surfaceContainerHighest,
                                             child: const Icon(
-                                              Icons.music_note,
+                                              Icons.graphic_eq,
                                               size: 80,
                                             ),
                                           ),
@@ -576,7 +576,7 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                                           color: theme
                                               .colorScheme.surfaceContainerHighest,
                                           child: const Icon(
-                                            Icons.music_note,
+                                            Icons.graphic_eq,
                                             size: 80,
                                           ),
                                         ),
