@@ -160,6 +160,33 @@ void main() {
       expect(controller.selected?.id, '1');
     });
 
+    testWidgets('Swiping outside thumbnail card in FullPlayerSheet skips to next track', (tester) async {
+      await controller.playQueue([sampleTrack('1'), sampleTrack('2')], initialIndex: 0);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: FullPlayerSheet(
+              playback: controller,
+              storage: storage,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(controller.currentIndex, 0);
+
+      // Drag horizontally in the area above the thumbnail card (topGap zone)
+      final cardRect = tester.getRect(find.byKey(const ValueKey('full_player_track_card')));
+      final outsideTopPoint = Offset(cardRect.center.dx, cardRect.top - 25);
+
+      await tester.dragFrom(outsideTopPoint, const Offset(-120, 0));
+      await tester.pumpAndSettle();
+
+      expect(controller.currentIndex, 1);
+      expect(controller.selected?.id, '2');
+    });
+
     testWidgets('Swiping left on PlaybackBar skips to next track', (tester) async {
       await controller.playQueue([sampleTrack('1'), sampleTrack('2')], initialIndex: 0);
 

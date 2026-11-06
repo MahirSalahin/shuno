@@ -387,9 +387,9 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                       (screenHeight - totalFixedUi).clamp(0.0, double.infinity);
 
                   // 16:9 Video Artwork sizing (preserves original video aspect ratio, prevents chopping titles & faces)
-                  final targetWidth = (screenWidth - 40).clamp(240.0, 420.0);
+                  final targetWidth = (screenWidth - 36).clamp(240.0, 420.0);
                   final targetHeight = targetWidth * (9 / 16);
-                  final maxArtHeight = (availableSpace * 0.55).clamp(140.0, 320.0);
+                  final maxArtHeight = (availableSpace * 0.52).clamp(140.0, 300.0);
 
                   final artworkHeight =
                       targetHeight > maxArtHeight ? maxArtHeight : targetHeight;
@@ -397,12 +397,18 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                       ? artworkHeight * (16 / 9)
                       : targetWidth;
 
-                  // Remaining margins distributed between top gap, mid gap, and bottom gap
-                  final remainingMargins =
-                      (availableSpace - artworkHeight).clamp(0.0, double.infinity);
-                  final topGap = (remainingMargins * 0.30).clamp(16.0, 90.0);
-                  final bottomGap = (remainingMargins * 0.28).clamp(20.0, 72.0);
-                  final midGap = (remainingMargins - topGap - bottomGap).clamp(16.0, double.infinity);
+                  // Bottom gap between controls and bottom toolbar
+                  final bottomGap = (availableSpace * 0.08).clamp(20.0, 44.0);
+
+                  // Space dedicated to upper section (between top bar and title row)
+                  final upperSpace =
+                      (availableSpace - bottomGap).clamp(0.0, double.infinity);
+                  final remainingUpperSpace =
+                      (upperSpace - artworkHeight).clamp(0.0, double.infinity);
+
+                  // Distribute upper space equally above and below artwork card (50% / 50% for vertical centering)
+                  final topGap = (remainingUpperSpace * 0.50).clamp(16.0, double.infinity);
+                  final midGap = (remainingUpperSpace - topGap).clamp(16.0, double.infinity);
 
                   return SingleChildScrollView(
                     physics: const BouncingScrollPhysics(),
@@ -496,310 +502,272 @@ class _FullPlayerSheetState extends State<FullPlayerSheet> {
                           ],
                         ),
 
-                        SizedBox(height: topGap),
+                        // Swipeable Area (Track navigation): works on thumbnail AND outside area (topGap, margins, midGap, title)
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onHorizontalDragStart: (_) {
+                            setState(() {
+                              _isDraggingCard = true;
+                              _cardDragOffset = 0.0;
+                            });
+                          },
+                          onHorizontalDragUpdate: (details) {
+                            setState(() {
+                              _cardDragOffset = (_cardDragOffset + (details.primaryDelta ?? 0.0))
+                                  .clamp(-140.0, 140.0);
+                            });
+                          },
+                          onHorizontalDragEnd: (details) {
+                            final velocity = details.primaryVelocity ?? 0.0;
+                            final shouldNext = _cardDragOffset < -40.0 || velocity < -250.0;
+                            final shouldPrev = _cardDragOffset > 40.0 || velocity > 250.0;
 
-                        // Center Artwork with Double-Tap to Seek (+/- 10s) and Ambient Natural Shadow
-                        Center(
-                                child: GestureDetector(
-                        key: const ValueKey('full_player_track_card'),
-                        onDoubleTapDown: (details) =>
-                            _onDoubleTapDown(details, artworkWidth),
-                        onHorizontalDragStart: (_) {
-                          setState(() {
-                            _isDraggingCard = true;
-                            _cardDragOffset = 0.0;
-                          });
-                        },
-                        onHorizontalDragUpdate: (details) {
-                          setState(() {
-                            _cardDragOffset = (_cardDragOffset + (details.primaryDelta ?? 0.0))
-                                .clamp(-120.0, 120.0);
-                          });
-                        },
-                        onHorizontalDragEnd: (details) {
-                          final velocity = details.primaryVelocity ?? 0.0;
-                          final shouldNext = _cardDragOffset < -40.0 || velocity < -250.0;
-                          final shouldPrev = _cardDragOffset > 40.0 || velocity > 250.0;
+                            if (shouldNext) {
+                              widget.playback.skipToNext();
+                            } else if (shouldPrev) {
+                              widget.playback.skipToPrevious();
+                            }
 
-                          if (shouldNext) {
-                            widget.playback.skipToNext();
-                          } else if (shouldPrev) {
-                            widget.playback.skipToPrevious();
-                          }
-
-                          setState(() {
-                            _isDraggingCard = false;
-                            _cardDragOffset = 0.0;
-                          });
-                        },
-                        onHorizontalDragCancel: () {
-                          if (_isDraggingCard) {
                             setState(() {
                               _isDraggingCard = false;
                               _cardDragOffset = 0.0;
                             });
-                          }
-                        },
-                        child: AnimatedContainer(
-                          duration: _isDraggingCard
-                              ? Duration.zero
-                              : const Duration(milliseconds: 240),
-                          curve: Curves.easeOutCubic,
-                          transform: Matrix4.translationValues(_cardDragOffset, 0, 0)
-                            ..rotateZ(_cardDragOffset * 0.0006),
-                          child: Container(
-                            width: artworkWidth,
-                            height: artworkHeight,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: Colors.white.withAlpha(20),
-                                width: 1,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withAlpha(160),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  effectiveThumbnailUrl.isNotEmpty
-                                      ? Image.network(
-                                          effectiveThumbnailUrl,
-                                          fit: isYouTubeThumb
-                                              ? BoxFit.cover
-                                              : BoxFit.contain,
-                                          cacheWidth: (artworkWidth * 2).toInt(),
-                                          errorBuilder:
-                                              (context, error, stackTrace) =>
-                                                  Container(
-                                            color: theme
-                                                .colorScheme.surfaceContainerHighest,
-                                            child: const Icon(
-                                              Icons.graphic_eq,
-                                              size: 80,
-                                            ),
-                                          ),
-                                        )
-                                      : Container(
-                                          color: theme
-                                              .colorScheme.surfaceContainerHighest,
-                                          child: const Icon(
-                                            Icons.graphic_eq,
-                                            size: 80,
-                                          ),
-                                        ),
+                          },
+                          onHorizontalDragCancel: () {
+                            if (_isDraggingCard) {
+                              setState(() {
+                                _isDraggingCard = false;
+                                _cardDragOffset = 0.0;
+                              });
+                            }
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              SizedBox(height: topGap),
 
-                                  // Seek Feedback Overlay
-                                  if (_seekFeedback != 0)
-                                    AnimatedContainer(
-                                      duration: const Duration(milliseconds: 200),
-                                      color: Colors.black54,
-                                      child: Center(
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
+                              // Center Artwork with Double-Tap to Seek (+/- 10s) and Simple Spotify-style Slide Animation
+                              Center(
+                                child: GestureDetector(
+                                  key: const ValueKey('full_player_track_card'),
+                                  behavior: HitTestBehavior.opaque,
+                                  onDoubleTapDown: (details) =>
+                                      _onDoubleTapDown(details, artworkWidth),
+                                  child: AnimatedContainer(
+                                    duration: _isDraggingCard
+                                        ? Duration.zero
+                                        : const Duration(milliseconds: 200),
+                                    curve: Curves.easeOutCubic,
+                                    transform: Matrix4.translationValues(_cardDragOffset, 0, 0),
+                                    child: Container(
+                                      width: artworkWidth,
+                                      height: artworkHeight,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: Colors.white.withAlpha(20),
+                                          width: 1,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withAlpha(160),
+                                            blurRadius: 20,
+                                            offset: const Offset(0, 8),
+                                          ),
+                                        ],
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Stack(
+                                          fit: StackFit.expand,
                                           children: [
-                                            Icon(
-                                              _seekFeedback < 0
-                                                  ? Icons.replay_10
-                                                  : Icons.forward_10,
-                                              size: 56,
-                                              color: Colors.white,
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              _seekFeedback < 0 ? '-10s' : '+10s',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 16,
+                                            effectiveThumbnailUrl.isNotEmpty
+                                                ? Image.network(
+                                                    effectiveThumbnailUrl,
+                                                    fit: isYouTubeThumb
+                                                        ? BoxFit.cover
+                                                        : BoxFit.contain,
+                                                    cacheWidth: (artworkWidth * 2).toInt(),
+                                                    errorBuilder:
+                                                        (context, error, stackTrace) =>
+                                                            Container(
+                                                      color: theme
+                                                          .colorScheme.surfaceContainerHighest,
+                                                      child: const Icon(
+                                                        Icons.graphic_eq,
+                                                        size: 80,
+                                                      ),
+                                                    ),
+                                                  )
+                                                : Container(
+                                                    color: theme
+                                                        .colorScheme.surfaceContainerHighest,
+                                                    child: const Icon(
+                                                      Icons.graphic_eq,
+                                                      size: 80,
+                                                    ),
+                                                  ),
+
+                                            // Seek Feedback Overlay (+/- 10s)
+                                            if (_seekFeedback != 0)
+                                              AnimatedContainer(
+                                                duration: const Duration(milliseconds: 200),
+                                                color: Colors.black54,
+                                                child: Center(
+                                                  child: Column(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        _seekFeedback < 0
+                                                            ? Icons.replay_10
+                                                            : Icons.forward_10,
+                                                        size: 56,
+                                                        color: Colors.white,
+                                                      ),
+                                                      const SizedBox(height: 8),
+                                                      Text(
+                                                        _seekFeedback < 0 ? '-10s' : '+10s',
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: 16,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
                                               ),
-                                            ),
                                           ],
                                         ),
                                       ),
                                     ),
+                                  ),
+                                ),
+                              ),
 
-                                  // Swipe Feedback Overlay (Next / Previous)
-                                  if (_cardDragOffset.abs() > 20)
-                                    Positioned.fill(
-                                      child: Container(
-                                        color: Colors.black.withAlpha(
-                                          (_cardDragOffset.abs() * 0.85).clamp(0, 150).toInt(),
-                                        ),
-                                        child: Center(
-                                          child: Row(
-                                            mainAxisAlignment: _cardDragOffset < 0
-                                                ? MainAxisAlignment.end
-                                                : MainAxisAlignment.start,
-                                            children: [
-                                              Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 24),
-                                                child: Column(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    Icon(
-                                                      _cardDragOffset < 0
-                                                          ? Icons.skip_next
-                                                          : Icons.skip_previous,
-                                                      size: 40,
-                                                      color: Colors.white.withAlpha(
-                                                        (_cardDragOffset.abs() * 3).clamp(80, 255).toInt(),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 4),
-                                                    Text(
-                                                      _cardDragOffset < 0 ? 'Next' : 'Previous',
-                                                      style: TextStyle(
-                                                        color: Colors.white.withAlpha(
-                                                          (_cardDragOffset.abs() * 3).clamp(80, 255).toInt(),
-                                                        ),
-                                                        fontWeight: FontWeight.bold,
-                                                        fontSize: 14,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
+                              SizedBox(height: midGap),
+
+                              // Title, Channel, Download & Favorite
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        MarqueeText(
+                                          text: item.title,
+                                          style: theme.textTheme.titleLarge?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: -0.3,
                                           ),
                                         ),
-                                      ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          item.channelName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: theme.textTheme.bodyMedium?.copyWith(
+                                            color: theme.colorScheme.onSurfaceVariant,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
                                     ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // Download Button (Track-level action)
+                                  if (isDownloading)
+                                    IconButton(
+                                      visualDensity: VisualDensity.compact,
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                                      icon: SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2.2,
+                                          value: downloadService?.getProgress(item.id),
+                                          color: theme.colorScheme.primary,
+                                        ),
+                                      ),
+                                      tooltip:
+                                          'Downloading ${((downloadService?.getProgress(item.id) ?? 0) * 100).toInt()}% (tap to cancel)',
+                                      onPressed: () {
+                                        downloadService?.cancelDownload(item.id);
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Download cancelled')),
+                                        );
+                                      },
+                                    )
+                                  else if (isDownloaded)
+                                    IconButton(
+                                      visualDensity: VisualDensity.compact,
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                                      icon: Icon(
+                                        Icons.download_done,
+                                        size: 24,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                      tooltip: 'Downloaded (offline ready)',
+                                      onPressed: () async {
+                                        final confirm = await showConfirmDialog(
+                                          context,
+                                          title: 'Delete Download?',
+                                          message:
+                                              'Remove downloaded audio for "${item.title}" from your device?',
+                                          confirmLabel: 'Delete',
+                                        );
+                                        if (confirm && context.mounted) {
+                                          downloadService?.deleteDownload(item.id);
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Download deleted')),
+                                          );
+                                        }
+                                      },
+                                    )
+                                  else
+                                    IconButton(
+                                      visualDensity: VisualDensity.compact,
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                                      icon: Icon(
+                                        Icons.arrow_circle_down_outlined,
+                                        size: 24,
+                                        color: Colors.white.withAlpha(200),
+                                      ),
+                                      tooltip: 'Download',
+                                      onPressed: () {
+                                        if (downloadService != null) {
+                                          downloadService.downloadTrack(item);
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Downloading "${item.title}"...'),
+                                              duration: const Duration(seconds: 3),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                    ),
+                                  const SizedBox(width: 2),
+                                  // Favorite Button (Track-level action)
+                                  IconButton(
+                                    iconSize: 26,
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                                    icon: Icon(
+                                      isFav ? Icons.favorite : Icons.favorite_border,
+                                      color: isFav ? Colors.redAccent : Colors.white.withAlpha(200),
+                                    ),
+                                    tooltip: isFav ? 'Remove from favorites' : 'Add to favorites',
+                                    onPressed: () => storage.toggleFavorite(item),
+                                  ),
                                 ],
                               ),
-                            ),
+                            ],
                           ),
                         ),
-                      ),
-                    ),
-
-                    SizedBox(height: midGap),
-
-            // Title, Channel, Download & Favorite
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      MarqueeText(
-                        text: item.title,
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        item.channelName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Download Button (Track-level action)
-                if (isDownloading)
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(width: 40, height: 40),
-                    icon: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.2,
-                        value: downloadService?.getProgress(item.id),
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    tooltip:
-                        'Downloading ${((downloadService?.getProgress(item.id) ?? 0) * 100).toInt()}% (tap to cancel)',
-                    onPressed: () {
-                      downloadService?.cancelDownload(item.id);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Download cancelled')),
-                      );
-                    },
-                  )
-                else if (isDownloaded)
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(width: 40, height: 40),
-                    icon: Icon(
-                      Icons.download_done,
-                      size: 24,
-                      color: theme.colorScheme.primary,
-                    ),
-                    tooltip: 'Downloaded (offline ready)',
-                    onPressed: () async {
-                      final confirm = await showConfirmDialog(
-                        context,
-                        title: 'Delete Download?',
-                        message:
-                            'Remove downloaded audio for "${item.title}" from your device?',
-                        confirmLabel: 'Delete',
-                      );
-                      if (confirm && context.mounted) {
-                        downloadService?.deleteDownload(item.id);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Download deleted')),
-                        );
-                      }
-                    },
-                  )
-                else
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(width: 40, height: 40),
-                    icon: Icon(
-                      Icons.arrow_circle_down_outlined,
-                      size: 24,
-                      color: Colors.white.withAlpha(200),
-                    ),
-                    tooltip: 'Download',
-                    onPressed: () {
-                      if (downloadService != null) {
-                        downloadService.downloadTrack(item);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Downloading "${item.title}"...'),
-                            duration: const Duration(seconds: 3),
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                const SizedBox(width: 2),
-                // Favorite Button (Track-level action)
-                IconButton(
-                  iconSize: 26,
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(width: 40, height: 40),
-                  icon: Icon(
-                    isFav ? Icons.favorite : Icons.favorite_border,
-                    color: isFav ? Colors.redAccent : Colors.white.withAlpha(200),
-                  ),
-                  tooltip: isFav ? 'Remove from favorites' : 'Add to favorites',
-                  onPressed: () => storage.toggleFavorite(item),
-                ),
-              ],
-            ),
             const SizedBox(height: 12),
 
             // Scrub Bar
