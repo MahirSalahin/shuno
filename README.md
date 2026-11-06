@@ -80,13 +80,17 @@ Engineered for podcasts, spoken word, and long-form audio with great ergonomics:
 
 ### 🔍 Search & Catalog Discovery
 
-- **Instant Search & Filter Chips**: Filter dynamically across **Tracks**, **Playlists**, and **Channels**.
-- **Persistent Docked Mini-Player**: Control audio, track title marquee, and swipe to skip tracks from anywhere in the app.
-- **100% Ad-Free**: Zero advertisements, zero commercial interruptions, and zero tracking.
+Effortlessly browse and discover spoken-word audio with dedicated category exploration:
 
-<p align="center">
-  <img src="screenshots/search_screen.jpg" width="260" alt="Search & Catalog Discovery" />
-</p>
+- **Dynamic Category Filter Chips**: Instantly switch between **Tracks**, **Playlists**, and **Channels** with preserved query context.
+- **Channel Exploration**: Browse full creator catalogs with subscriber counts, channel uploads, and custom playlists.
+- **Playlist Catalog Exploration**: Inspect curated playlists with track count indicators, batch play, and sequential playback.
+- **Persistent Docked Mini-Player**: Access quick playback controls, animated title marquee, and horizontal swipe gestures from any search view.
+- **100% Ad-Free**: Zero commercial interruptions, zero sponsored banners, and zero tracking.
+
+| Tracks Search | Playlists Search | Channels Search |
+|:---:|:---:|:---:|
+| <img src="screenshots/search_tracks.jpg" width="240" alt="Tracks Search" /> | <img src="screenshots/search_playlists.jpg" width="240" alt="Playlists Search" /> | <img src="screenshots/search_channels.jpg" width="240" alt="Channels Search" /> |
 
 ---
 
