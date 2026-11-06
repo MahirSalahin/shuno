@@ -1,37 +1,84 @@
-# Shuno
+<p align="center">
+  <img src="assets/shuno.png" alt="Shuno Logo" width="128" />
+</p>
 
-A modern, **100% ad-free**, local-first audio player built with Flutter, designed specifically for an immersive **Audiobook + PDF Reading** experience, podcast listening, and long-form spoken-word audio.
+<h1 align="center">Shuno</h1>
+
+<p align="center">
+  A modern, <strong>100% ad-free</strong>, local-first audio player built with Flutter, designed specifically for an immersive <strong>Audiobook + PDF Reading</strong> experience, podcast listening, and long-form spoken-word audio.
+</p>
+
+<p align="center">
+  <a href="#-immersive-audiobook--pdf-reader">Audiobook & PDF Reader</a> •
+  <a href="#-audio--spoken-word-playback">Now Playing & Controls</a> •
+  <a href="#-search--catalog-discovery">Search & Discovery</a> •
+  <a href="#-spotify-grade-queue--library">Queue & Library</a> •
+  <a href="#architecture-overview">Architecture</a> •
+  <a href="#getting-started">Getting Started</a>
+</p>
 
 ---
 
-## Highlights
+## Features & Highlights
 
 ### 📖 Immersive Audiobook + PDF Reader
-- **Simultaneous Read & Listen**: Read the original book or document while listening to the narration.
-- **Distraction-Free Immersion**: Audio controls and top app bars dim and fade smoothly while reading, giving you maximum screen space for reading.
-- **Smart Sibling Matching**: Automatically detects multi-part audiobook tracks and associates them with the same book PDF across your library.
-- **Dual Bookmarking**: Automatically persists your exact reading page and audio playback position across sessions.
-- **Fluid PDF Navigation**: Fast page-jumping slider, grid preview, and title management.
 
-### 🚫 100% Ad-Free & Distraction-Free
-- Zero advertisements, zero interruptions, and zero commercial banners.
-- No accounts, logins, subscriptions, or tracking. Your listening habits stay private on your device.
+Experience true dual-mode immersion by reading the original literature while listening to the audio narration:
+
+- **OLED Dark Mode for Reading**: Toggle dark theme on PDFs to invert pages into soothing white text on pure AMOLED black, eliminating eye strain during night-time reading sessions.
+- **Distraction-Free Immersion**: Audio controls and top app bars smoothly fade away while reading, collapsing into an ultra-minimal floating pill (`[ || 10/101 ^ ]`) to grant 100% of the screen to your text.
+- **Internet Archive & Local PDF Integration**: Search and attach free public domain books and documents directly from the Internet Archive, or load PDFs from local device storage.
+- **Dual Bookmarking**: Automatically persists your exact reading page and audio timestamp across sessions.
+- **Smart Sibling Matching**: Detects multi-part audio tracks and associates them with the same book PDF across your library.
+- **Fluid Navigation**: Fast page-jumping slider, grid overview, and instant page jumps.
+
+| Attach Book (Internet Archive) | Dark Theme | Light Theme |
+|:---:|:---:|:---:|
+|<img src="screenshots/attach_book.jpg" width="240" alt="Attach Book from Internet Archive" /> | <img src="screenshots/audiobook_reader_dark.jpg" width="240" alt="Dark Theme PDF Reader" /> | <img src="screenshots/audiobook_reader.jpg" width="240" alt="Audiobook Reader with Controls" /> |
+
+---
 
 ### 🎧 Audio & Spoken-Word Playback
-- **Gesture-Driven Track Navigation**: Swipe left or right on either the mini-player or the full player card to skip tracks, accompanied by interactive real-time title translations.
-- **Dynamic Title Marquee**: Long titles smoothly scroll with marquee animations across both the playback bar and full-screen player sheet.
-- **Fine-Grained Speed Control**: Adjust playback speed from `0.75x` up to `2.5x` with pitch preservation.
-- **Quick Scrubbing**: Double-tap the player or reader to skip 10 seconds backward or forward with visual feedback.
-- **Custom Sleep Timer**: Set a countdown timer (`15m`, `30m`, `45m`, `60m`) or stop playback automatically at the **End of Track**.
-- **Background & Screen-Off Playback**: Native foreground audio service (`audio_service`) with persistent system notifications and lock-screen controls.
+
+Engineered for podcasts, spoken word, and long-form audio with great ergonomics:
+
+- **Centered Widescreen 16:9 Artwork**: Displays full 16:9 video thumbnails centered vertically without horizontal cropping—preserving guest faces, titles, and Arabic calligraphy.
+- **Expanded Swipe Touch Surface**: Swipe left or right anywhere across the upper-to-middle screen (covering the thumbnail, side margins, and title) to skip tracks, with smooth, distraction-free horizontal translation.
+- **Dynamic Title Marquee**: Long titles smoothly scroll with marquee animations across both the bottom mini-player and full-screen player sheet.
+- **Fine-Grained Speed Control**: Adjust playback speed from `0.75x` up to `2.5x` with clean pitch preservation.
+- **Quick Scrubbing**: Double-tap either side of the artwork or reader to seek $\pm 10$ seconds with visual feedback.
+- **Custom Sleep Timer**: Set countdown timers (`15m`, `30m`, `45m`, `60m`) or stop playback automatically at the **End of Track**.
+- **Background Audio & Notification Controls**: Native background audio service (`audio_service`) with persistent lock-screen media controls and system notifications.
+
+| Now Playing (Podcast) | Now Playing (Recitation) | Audiobook View (Attached PDF) |
+|:---:|:---:|:---:|
+| <img src="screenshots/now_playing.jpg" width="240" alt="Now Playing Podcast" /> | <img src="screenshots/now_playing_recitation.jpg" width="240" alt="Now Playing Recitation" /> | <img src="screenshots/audiobook_player.jpg" width="240" alt="Audiobook Player View" /> |
+
+---
+
+### 🔍 Search & Catalog Discovery
+
+- **Instant Search & Filter Chips**: Filter dynamically across **Tracks**, **Playlists**, and **Channels**.
+- **Persistent Docked Mini-Player**: Control audio, track title marquee, and swipe to skip tracks from anywhere in the app.
+- **100% Ad-Free**: Zero advertisements, zero commercial interruptions, and zero tracking.
+
+<p align="center">
+  <img src="screenshots/search_screen.jpg" width="260" alt="Search & Catalog Discovery" />
+</p>
+
+---
 
 ### 💾 Offline Listening & Local-First Storage
+
 - **Download for Offline Listening**: Save audio tracks directly to device storage for 100% offline access when traveling.
 - **Resume Where You Left Off**: Automatically remembers your last playback position for offline audio tracks.
 - **Local JSON Persistence**: Lightweight, battery-efficient local storage without heavy databases or external services.
 
-### 🗂️ Library & Queue Management
-- **Spotify-Grade Multi-Tier Queue**: Prioritizes manual user additions (`Play Next`, `Add to Queue`) above playlist context and transient autoplay recommendations. Manually queued tracks persist across new track searches, while stale autoplay recommendations are automatically purged upon starting a new track.
+---
+
+### 🗂️ Queue & Library
+
+- **Multi-Tier Priority Queue**: Prioritizes manual user additions (`Play Next`, `Add to Queue`) above playlist context and transient autoplay recommendations. Manually queued tracks persist across new track searches, while stale autoplay recommendations are automatically purged upon starting a new track.
 - **Granular Queue Controls**: Independent "Clear queue" action for user-queued tracks, visual "In Queue" badges, and reorderable drag-and-drop handles.
 - **Custom Playlists & Channels**: Group chapters and series into custom playlists, or explore channels and catalog playlists directly.
 - **Favorites & History**: Quick-access bookmarks and timestamped listening history.
