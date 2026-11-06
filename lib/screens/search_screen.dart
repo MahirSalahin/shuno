@@ -239,16 +239,16 @@ class _SearchScreenState extends State<SearchScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  FilledButton.icon(
+                  FilledButton(
                     style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      padding: const EdgeInsets.all(12),
+                      minimumSize: const Size(48, 48),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(26),
+                        borderRadius: BorderRadius.circular(24),
                       ),
                     ),
                     onPressed: _isLoading ? null : () => _search(),
-                    icon: const Icon(Icons.search, size: 20),
-                    label: const Text('Search'),
+                    child: const Icon(Icons.search_rounded, size: 22),
                   ),
                 ],
               ),

@@ -4,6 +4,7 @@ import '../services/download_service.dart';
 import '../services/playback_controller.dart';
 import '../services/storage_service.dart';
 import 'full_player_sheet.dart';
+import 'marquee_text.dart';
 
 class PlaybackBar extends StatefulWidget {
   const PlaybackBar({
@@ -211,10 +212,8 @@ class _PlaybackBarState extends State<PlaybackBar> {
                                           mainAxisSize: MainAxisSize.min,
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Text(
-                                              item.title,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
+                                            MarqueeText(
+                                              text: item.title,
                                               style: theme.textTheme.titleSmall?.copyWith(
                                                 fontWeight: FontWeight.w600,
                                                 fontSize: 13.5,

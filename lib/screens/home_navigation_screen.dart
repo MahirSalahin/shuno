@@ -113,23 +113,23 @@ class _HomeNavigationScreenState extends State<HomeNavigationScreen> {
                     setState(() => _currentIndex = index),
                 destinations: [
                   const NavigationDestination(
-                    icon: Icon(Icons.search),
-                    selectedIcon: Icon(Icons.search),
+                    icon: Icon(Icons.search_rounded),
+                    selectedIcon: Icon(Icons.search_rounded),
                     label: 'Search',
                   ),
                   const NavigationDestination(
-                    icon: Icon(Icons.library_books_outlined),
-                    selectedIcon: Icon(Icons.library_books),
+                    icon: Icon(Icons.collections_bookmark_outlined),
+                    selectedIcon: Icon(Icons.collections_bookmark_rounded),
                     label: 'Library',
                   ),
                   const NavigationDestination(
-                    icon: Icon(Icons.playlist_play_outlined),
-                    selectedIcon: Icon(Icons.playlist_play),
+                    icon: Icon(Icons.playlist_play_rounded),
+                    selectedIcon: Icon(Icons.playlist_play_rounded),
                     label: 'Queue',
                   ),
                   const NavigationDestination(
-                    icon: Icon(Icons.settings_outlined),
-                    selectedIcon: Icon(Icons.settings),
+                    icon: Icon(Icons.tune_rounded),
+                    selectedIcon: Icon(Icons.tune_rounded),
                     label: 'Settings',
                   ),
                 ],

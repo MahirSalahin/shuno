@@ -125,7 +125,7 @@ Future<void> openSearch(WidgetTester tester, FakeYoutubeService service) async {
 
 Future<void> submit(WidgetTester tester, String query) async {
   await tester.enterText(find.byType(TextField), query);
-  await tester.tap(find.widgetWithText(FilledButton, 'Search'));
+  await tester.tap(find.byType(FilledButton));
   await tester.pump();
 }
 
