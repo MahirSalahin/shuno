@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="#-download-apk">Download APK</a> •
   <a href="#-immersive-audiobook--pdf-reader">Audiobook & PDF Reader</a> •
   <a href="#-audio--spoken-word-playback">Now Playing & Controls</a> •
   <a href="#-search--catalog-discovery">Search & Discovery</a> •
@@ -19,14 +20,35 @@
 
 ---
 
+## 📥 Download APK
+
+Get the latest Android release from the [**GitHub Releases**](https://github.com/MahirSalahin/shuno/releases/latest) page:
+
+<p align="center">
+  <a href="https://github.com/MahirSalahin/shuno/releases/latest">
+    <img src="https://img.shields.io/github/v/release/MahirSalahin/shuno?color=2ea44f&label=Latest%20Release&style=for-the-badge&logo=android" alt="Download Latest APK" />
+  </a>
+</p>
+
+| Package | Architecture | Size | Recommended For |
+|---|---|---|---|
+| [**`shuno-v0.1.0-arm64-v8a.apk`**](https://github.com/MahirSalahin/shuno/releases/latest) | `arm64-v8a` | **27.0 MB** | **Recommended** (99% of modern Android smartphones) |
+| [**`shuno-v0.1.0.apk`**](https://github.com/MahirSalahin/shuno/releases/latest) | Universal | **71.7 MB** | Universal build compatible with all device architectures |
+| [**`shuno-v0.1.0-armeabi-v7a.apk`**](https://github.com/MahirSalahin/shuno/releases/latest) | `armeabi-v7a` | **23.2 MB** | Legacy 32-bit Android devices |
+
+> [!TIP]
+> Download the **`arm64-v8a`** APK for the fastest download and smallest footprint on modern phones. If you are unsure which architecture your device uses, download the **Universal** (`shuno-v0.1.0.apk`) package.
+
+---
+
 ## Features & Highlights
 
 ### 📖 Immersive Audiobook + PDF Reader
 
 Experience true dual-mode immersion by reading the original literature while listening to the audio narration:
 
-- **OLED Dark Mode for Reading**: Toggle dark theme on PDFs to invert pages into soothing white text on pure AMOLED black, eliminating eye strain during night-time reading sessions.
 - **Distraction-Free Immersion**: Audio controls and top app bars smoothly fade away while reading, collapsing into an ultra-minimal floating pill (`[ || 10/101 ^ ]`) to grant 100% of the screen to your text.
+- **OLED Dark Mode for Reading**: Toggle dark theme on PDFs to invert pages into soothing white text on pure AMOLED black, eliminating eye strain during night-time reading sessions.
 - **Internet Archive & Local PDF Integration**: Search and attach free public domain books and documents directly from the Internet Archive, or load PDFs from local device storage.
 - **Dual Bookmarking**: Automatically persists your exact reading page and audio timestamp across sessions.
 - **Smart Sibling Matching**: Detects multi-part audio tracks and associates them with the same book PDF across your library.
