@@ -584,7 +584,7 @@ class _AttachPdfSheetState extends State<AttachPdfSheet> {
                   icon: const Icon(Icons.arrow_forward, size: 20),
                   onPressed: () {
                     setState(() => _selectedChipIndex = -2);
-                    _performSearch();
+                    _performSearch(_searchController.text);
                   },
                 ),
                 isDense: true,

@@ -286,6 +286,47 @@ void main() {
       expect(results.first.creator, 'Aldous Huxley');
     });
 
+    test('searchArchive safely parses array creators and list titles without throwing TypeError', () async {
+      final mockClient = MockClient((request) async {
+        final mockResponse = {
+          'response': {
+            'numFound': 2,
+            'docs': [
+              {
+                'identifier': 'gitanjali_multi_creator',
+                'title': ['Gitanjali (Song Offerings)', 'Gitanjali'],
+                'creator': ['Rabindranath Tagore', 'W. B. Yeats'],
+              },
+              {
+                'identifier': 'hamlet_ed',
+                'title': "Shakespeare's Hamlet",
+                'creator': ['William Shakespeare', 'John Livingston Lowes'],
+              },
+            ],
+          },
+        };
+        return http.Response(jsonEncode(mockResponse), 200, headers: {
+          'content-type': 'application/json',
+        });
+      });
+
+      final service = BookService(httpClient: mockClient);
+      final results = await service.searchArchive('Gitanjali');
+
+      expect(results.length, 2);
+      expect(results[0].title, 'Gitanjali (Song Offerings)');
+      expect(results[0].creator, 'Rabindranath Tagore, W. B. Yeats');
+      expect(results[1].title, "Shakespeare's Hamlet");
+      expect(results[1].creator, 'William Shakespeare, John Livingston Lowes');
+    });
+
+    test('extractSearchQueries preserves hyphenated titles without splitting', () {
+      final queries = BookService.extractSearchQueries(
+        'Surah Adh-Dhuha | Ayah 1-11 | Beautiful Quran Recitation',
+      );
+      expect(queries, contains('Surah Adh-Dhuha'));
+    });
+
     test('searchArchiveMulti merges and deduplicates results across candidate queries', () async {
       final mockClient = MockClient((request) async {
         final queryParam = request.url.queryParameters['q'] ?? '';

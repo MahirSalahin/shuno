@@ -245,7 +245,7 @@ class BookService extends ChangeNotifier {
     ];
 
     final rawSegments = clean
-        .split(RegExp(r'[|•\-_—–]+'))
+        .split(RegExp(r'(\s+[-—–]+\s*|\s*[-—–]+\s+|[|•_]+)'))
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
         .toList();
@@ -465,30 +465,97 @@ class BookService extends ChangeNotifier {
     if (cleaned.isEmpty) return [];
 
     try {
-      final encoded = Uri.encodeComponent('$cleaned AND mediatype:texts');
+      final sanitized = _sanitizeArchiveQuery(cleaned);
+      if (sanitized.isEmpty) return [];
+
+      final encoded = Uri.encodeComponent('$sanitized AND mediatype:texts');
       final url = Uri.parse(
         'https://archive.org/advancedsearch.php?q=$encoded&fl[]=identifier,title,creator,downloads&sort[]=downloads+desc&rows=15&output=json',
       );
 
-      final response = await _client.get(url).timeout(const Duration(seconds: 15));
+      final response = await _client.get(
+        url,
+        headers: {
+          'User-Agent': 'Shuno/1.0 (Linux; Android) AudioBookReader',
+          'Accept': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) return [];
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final docs = data['response']?['docs'] as List? ?? [];
 
-      return docs.map((doc) {
-        final id = doc['identifier'] as String? ?? '';
-        final title = doc['title'] as String? ?? id;
-        final creator = doc['creator'] as String?;
-        return ArchiveBookItem(
-          id: id,
-          title: title,
-          creator: creator,
-        );
-      }).where((b) => b.id.isNotEmpty).toList();
-    } catch (_) {
+      var items = _parseArchiveDocs(docs);
+
+      // If strict match yielded 0 items and query had multiple terms, try title-level OR fallback
+      if (items.isEmpty) {
+        final words = sanitized
+            .split(RegExp(r'\s+'))
+            .map((w) => w.trim())
+            .where((w) =>
+                w.length > 2 &&
+                !w.toLowerCase().contains('and') &&
+                !w.toLowerCase().contains('the'))
+            .toList();
+        if (words.length > 1) {
+          final orClauses = words.take(4).map((w) => 'title:$w').join(' OR ');
+          final fallbackEncoded =
+              Uri.encodeComponent('($orClauses) AND mediatype:texts');
+          final fallbackUrl = Uri.parse(
+            'https://archive.org/advancedsearch.php?q=$fallbackEncoded&fl[]=identifier,title,creator,downloads&sort[]=downloads+desc&rows=15&output=json',
+          );
+          final fallbackRes = await _client.get(
+            fallbackUrl,
+            headers: {
+              'User-Agent': 'Shuno/1.0 (Linux; Android) AudioBookReader',
+              'Accept': 'application/json',
+            },
+          ).timeout(const Duration(seconds: 15));
+          if (fallbackRes.statusCode == 200) {
+            final fallbackData =
+                jsonDecode(fallbackRes.body) as Map<String, dynamic>;
+            final fallbackDocs =
+                fallbackData['response']?['docs'] as List? ?? [];
+            items = _parseArchiveDocs(fallbackDocs);
+          }
+        }
+      }
+
+      return items;
+    } catch (e) {
+      if (kDebugMode) debugPrint('Internet Archive search failed: $e');
       return [];
     }
+  }
+
+  static String _sanitizeArchiveQuery(String query) {
+    var q = query.replaceAll(RegExp(r'[|:()[\]{}^~*?!\\]'), ' ');
+    q = q.replaceAll(RegExp(r'\s+[-—–]+\s+'), ' ');
+    return q.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  static List<ArchiveBookItem> _parseArchiveDocs(List docs) {
+    return docs.map((doc) {
+      if (doc is! Map) return null;
+      final id = doc['identifier']?.toString() ?? '';
+      if (id.isEmpty) return null;
+
+      final rawTitle = doc['title'];
+      final title = rawTitle is List
+          ? (rawTitle.isNotEmpty ? rawTitle.first.toString() : id)
+          : (rawTitle?.toString() ?? id);
+
+      final rawCreator = doc['creator'];
+      final creator = rawCreator is List
+          ? rawCreator.map((c) => c.toString()).join(', ')
+          : rawCreator?.toString();
+
+      return ArchiveBookItem(
+        id: id,
+        title: title,
+        creator: creator,
+      );
+    }).whereType<ArchiveBookItem>().toList();
   }
 
   /// Searches Internet Archive across multiple candidate queries in parallel,
